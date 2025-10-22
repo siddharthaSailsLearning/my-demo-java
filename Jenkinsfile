@@ -16,6 +16,12 @@ pipeline {
         }
 
         stage('Maven Build') {
+            agent {
+                docker {
+                    image 'maven:3.9.6-eclipse-temurin-17'  // Maven + JDK17 in container
+                    args '-v /var/run/docker.sock:/var/run/docker.sock'  // Pass Docker sock if needed later
+                }
+            }
             steps {
                 echo 'Building WAR with Maven...'
                 sh 'mvn clean package -DskipTests'  // Builds target/demo.war (skip tests here for speed)
