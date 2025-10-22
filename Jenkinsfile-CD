@@ -1,0 +1,56 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "siddhussoft136/java-app"
+        CONTAINER_NAME = "java-webapp"
+    }
+
+    stages {
+
+        stage('Pull Docker Image') {
+            steps {
+                sh 'docker pull $IMAGE_NAME:latest'
+            }
+        }
+
+        stage('Stop and Remove Old Container') {
+            steps {
+                script {
+                    sh '''
+                    if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
+                        echo "Stopping old container..."
+                        docker stop $CONTAINER_NAME
+                        docker rm $CONTAINER_NAME
+                    fi
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy New Container') {
+            steps {
+                sh 'docker run -d -p 8081:8080 --name $CONTAINER_NAME $IMAGE_NAME:latest'
+            }
+        }
+
+        stage('Smoke Test') {
+            steps {
+                script {
+                    echo "Running smoke test..."
+                    sleep 10
+                    sh 'curl -f http://localhost:8081/demo/Hello || (echo "Smoke test failed!" && exit 1)'
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Deployment successful!"
+        }
+        failure {
+            echo "❌ Deployment failed."
+        }
+    }
+}

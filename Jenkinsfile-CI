@@ -1,0 +1,52 @@
+pipeline {
+    agent any
+
+    triggers {
+        githubPush() // automatically trigger on repo push
+    }
+
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds') // Jenkins credentials ID
+        IMAGE_NAME = "siddhussoft136/java-app"
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+    }
+
+    stages {
+
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main', url: 'https://github.com/siddharthaSailsLearning/my-demo-java.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t $IMAGE_NAME:$IMAGE_TAG -t $IMAGE_NAME:latest .'
+            }
+        }
+
+        stage('Login to Docker Hub') {
+            steps {
+                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+            }
+        }
+
+        stage('Push Image to DockerHub') {
+            steps {
+                sh 'docker push $IMAGE_NAME:$IMAGE_TAG'
+                sh 'docker push $IMAGE_NAME:latest'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ CI pipeline successful — triggering CD pipeline..."
+            // Trigger CD pipeline automatically
+            build job: 'java-cd-pipeline', wait: false
+        }
+        failure {
+            echo "❌ CI pipeline failed — CD will not run."
+        }
+    }
+}
