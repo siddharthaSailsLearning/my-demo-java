@@ -10,7 +10,7 @@ public class Hello extends HttpServlet {
 
    public void init() throws ServletException {
       // Do required initialization
-      message = "stoppped ngork and restarted";
+      message = "stoppped ngork and restarted after port map";
    }
 
    public void doGet(HttpServletRequest request, HttpServletResponse response)
