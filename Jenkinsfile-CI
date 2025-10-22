@@ -43,7 +43,7 @@ pipeline {
         success {
             echo "✅ CI pipeline successful — triggering CD pipeline..."
             // Trigger CD pipeline automatically
-            build job: 'java-app-ci', wait: false
+            build job: 'java-app-cd'
         }
         failure {
             echo "❌ CI pipeline failed — CD will not run."
