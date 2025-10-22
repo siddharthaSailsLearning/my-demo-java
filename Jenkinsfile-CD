@@ -27,7 +27,7 @@ pipeline {
                 docker rm -f test-app || true
                 docker run -d --name test-app -p 8082:8080 ${DOCKER_IMAGE}:latest
                 sleep 15
-                curl -f http://localhost:8082 || (echo "Container not responding!" && exit 1)
+                curl -f http://localhost:8082/demo/Hello || (echo "Container not responding!" && exit 1)
                 docker stop test-app && docker rm test-app
                 '''
             }
