@@ -1,111 +1,69 @@
 pipeline {
-    agent any  // Runs on Jenkins node (with Docker sock)
+    agent any
 
     environment {
-        DOCKER_IMAGE = 'siddhussoft136/demo-java'  // Replace with your Docker Hub repo
-        DOCKER_TAG = 'latest'
-        APP_PORT = '8080'
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds')
+        DOCKERHUB_USER = "${DOCKERHUB_CREDENTIALS_USR}"
+        DOCKERHUB_PASS = "${DOCKERHUB_CREDENTIALS_PSW}"
+        IMAGE_NAME = "siddhussoft136/java-app"
+    }
+
+    triggers {
+        githubPush() // Triggers automatically when push happens
     }
 
     stages {
-        stage('Checkout') {
+
+        stage('Clone Repository') {
             steps {
-                echo 'Checking out code from GitHub...'
-                checkout scm  // Auto-checkout from repo
+                git branch: 'main', credentialsId: 'github-cred', url: 'https://github.com/siddharthaSailsLearning/my-demo-java.git'
             }
         }
 
-        stage('Maven Build') {
-            agent {
-                docker {
-                    image 'maven:3.9.6-eclipse-temurin-17'  // Maven + JDK17 in container
-                    args '-v /var/run/docker.sock:/var/run/docker.sock'  // Pass Docker sock if needed later
-                }
-            }
+        stage('Build Docker Image') {
             steps {
-                echo 'Building WAR with Maven...'
-                sh 'mvn clean package -DskipTests'  // Builds target/demo.war (skip tests here for speed)
-                sh 'mkdir -p pkg && cp target/demo.war pkg/'  // Move WAR as per original build script
-            }
-        }
-
-        stage('Docker Build') {
-            steps {
-                echo 'Building Docker image...'
                 script {
-                    def image = docker.build("${env.DOCKER_IMAGE}:${env.DOCKER_TAG}")
-                    env.BUILT_IMAGE = image.id
+                    sh 'docker build -t $IMAGE_NAME:latest .'
                 }
             }
         }
 
-        stage('Docker Push') {
+        stage('Login to Docker Hub') {
             steps {
-                echo 'Pushing image to Docker Hub...'
                 script {
-                    docker.withRegistry('https://index.docker.io/v1/', 'dockerhub-creds') {
-                        docker.image("${env.DOCKER_IMAGE}:${env.DOCKER_TAG}").push()
-                    }
+                    sh "echo $DOCKERHUB_PASS | docker login -u $DOCKERHUB_USER --password-stdin"
                 }
             }
         }
 
-        stage('Test') {
+        stage('Push to Docker Hub') {
             steps {
-                echo 'Pulling and testing image...'
                 script {
-                    // Pull latest (in case of concurrent pushes)
-                    sh "docker pull ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}"
-                    
-                    // Run temp container for tests
-                    def testContainer = docker.run("${env.DOCKER_IMAGE}:${env.DOCKER_TAG}", 
-                                                  '-p 8080:8080 --rm', 
-                                                  [], 30)  // Timeout 30s
-                    
-                    // Wait for startup (Tomcat ~10s)
-                    sleep 15
-                    
-                    // Curl tests
-                    sh "curl -f http://localhost:8080/demo/Hello || exit 1"  // Expect "Hello World Hello.java"
-                    sh "curl -f http://localhost:8080/demo/index.jsp || exit 1"  // Expect "Hello World index.jsp"
-                    
-                    // Cleanup
-                    docker.stop(testContainer)
+                    sh 'docker push $IMAGE_NAME:latest'
                 }
             }
         }
 
-        stage('Deploy') {
+        stage('Deploy Locally') {
             steps {
-                echo 'Deploying to localhost...'
                 script {
-                    // Stop existing container if running (name: demo-app)
-                    sh 'docker stop demo-app || true'
-                    sh 'docker rm demo-app || true'
-                    
-                    // Run new container
-                    sh "docker run -d --name demo-app -p ${env.APP_PORT}:8080 ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}"
-                    
-                    // Verify deployment
-                    sleep 10
-                    sh "curl -f http://localhost:${env.APP_PORT}/demo/Hello || exit 1"
+                    // Stop any old container
+                    sh 'docker rm -f my-java-app || true'
+                    // Pull latest image
+                    sh 'docker pull $IMAGE_NAME:latest'
+                    // Run container
+                    sh 'docker run -d --name my-java-app -p 8081:8080 $IMAGE_NAME:latest'
                 }
             }
         }
     }
 
     post {
-        always {
-            echo 'Pipeline completed!'
-            // Cleanup workspace if needed
-            cleanWs()
-        }
         success {
-            echo 'Build successful! App live at http://localhost:8080/demo/Hello'
+            echo '✅ Deployment successful!'
         }
         failure {
-            echo 'Pipeline failed. Check logs.'
-            // Optional: Slack/email notification
+            echo '❌ Pipeline failed!'
         }
     }
 }
