@@ -39,7 +39,7 @@ pipeline {
                 sh '''
                 set -x
                 docker rm -f java-app || true
-                docker run -d --name java-app -p 8081:8080 ${DOCKER_IMAGE}:latest
+                docker run -d --name java-app -p 8082:8080 ${DOCKER_IMAGE}:latest
                 '''
             }
         }
