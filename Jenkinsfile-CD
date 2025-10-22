@@ -2,55 +2,59 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "siddhussoft136/java-app"
-        CONTAINER_NAME = "java-webapp"
+        DOCKER_IMAGE = "siddhussoft136/java-app"
     }
 
     stages {
-
-        stage('Pull Docker Image') {
+        stage('Pull Latest Image') {
             steps {
-                sh 'docker pull $IMAGE_NAME:latest'
-            }
-        }
-
-        stage('Stop and Remove Old Container') {
-            steps {
-                script {
+                echo "📦 Pulling latest Docker image..."
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-cred', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                     sh '''
-                    if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
-                        echo "Stopping old container..."
-                        docker stop $CONTAINER_NAME
-                        docker rm $CONTAINER_NAME
-                    fi
+                    set -x
+                    echo "$PASS" | docker login -u "$USER" --password-stdin
+                    docker pull ${DOCKER_IMAGE}:latest
                     '''
                 }
             }
         }
 
-        stage('Deploy New Container') {
+        stage('Test Container') {
             steps {
-                sh 'docker run -d -p 8081:8080 --name $CONTAINER_NAME $IMAGE_NAME:latest'
+                echo "🧪 Running temporary test container..."
+                sh '''
+                set -x
+                docker rm -f test-app || true
+                docker run -d --name test-app -p 8081:8080 ${DOCKER_IMAGE}:latest
+                sleep 15
+                curl -f http://localhost:8081 || (echo "Container not responding!" && exit 1)
+                docker stop test-app && docker rm test-app
+                '''
             }
         }
 
-        stage('Smoke Test') {
+        stage('Deploy Locally') {
             steps {
-                script {
-                    echo "Running smoke test..."
-                    sleep 10
-                    sh 'curl -f http://localhost:8081/demo/Hello || (echo "Smoke test failed!" && exit 1)'
-                }
+                echo "🚀 Deploying container..."
+                sh '''
+                set -x
+                docker rm -f java-app || true
+                docker run -d --name java-app -p 8080:8080 ${DOCKER_IMAGE}:latest
+                '''
             }
         }
     }
 
     post {
+        always {
+            echo "🔍 Cleaning up..."
+            sh 'docker ps -a'
+        }
         success {
-            echo "✅ Deployment successful!"
+            echo '✅ CD pipeline executed successfully.'
         }
         failure {
-            echo "❌ Deployment failed."
+            echo '❌ CD pipeline failed. Check error logs above.'
         }
     }
 }
