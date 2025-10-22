@@ -10,7 +10,7 @@ public class Hello extends HttpServlet {
 
    public void init() throws ServletException {
       // Do required initialization
-      message = "Welcome Jenkins automation..!";
+      message = "stoppped ngork";
    }
 
    public void doGet(HttpServletRequest request, HttpServletResponse response)
