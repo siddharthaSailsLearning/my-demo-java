@@ -10,7 +10,7 @@ public class Hello extends HttpServlet {
 
    public void init() throws ServletException {
       // Do required initialization
-      message = "Hello World: Trigger success-succeding steps";
+      message = "Welcome to my web page ..!";
    }
 
    public void doGet(HttpServletRequest request, HttpServletResponse response)
