@@ -1,0 +1,66 @@
+gcloud
+
+gcloud services enable artifactregistry.googleapis.com cloudresourcemanager.googleapis.com iam.googleapis.com 
+
+storage -> us-central1-docker.pkg.dev/8197923751/my-docker-repo
+
+GAR permissions -> gcloud projects add-iam-policy-binding 8197923751 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/artifactregistry.writer" 
+
+gcloud permissions -> gcloud projects add-iam-policy-binding 8197923751 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/storage.objectAdmin" 
+
+test locallly
+
+gcloud auth activate-service-account --key-file=~/jenkins-key.json
+gcloud auth configure-docker us-central1-docker.pkg.dev
+docker build -t us-central1-docker.pkg.dev/8197923751/jenkins-ci-cd-ar/javaapplication:latest .
+docker push us-central1-docker.pkg.dev/8197923751/jenkins-ci-cd-ar/javaapplication:latest
+
+
+---------------------------------------------------
+
+docker run -d \
+  --name jenkins \
+  -p 8080:8080 -p 50000:50000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v jenkins_home:/var/jenkins_home \
+  -v ~/jenkins-key.json:/var/jenkins_home/jenkins-key.json \
+  jenkins/jenkins:lts
+  
+---------  or  -------
+
+docker run -d --name jenkins -p 8080:8080 -p 50000:50000 -v /var/run/docker.sock:/var/run/docker.sock -v jenkins_home:/var/jenkins_home -v ~/jenkins-key.json:/var/jenkins_home/jenkins-key.json jenkins/jenkins
+-----------------------------------------------------------------
+
+
+ stage('Setup GCP Auth') {
+            steps {
+                withCredentials([file(credentialsId: 'gcp-service-account', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
+                    sh '''
+                    gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+                    gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+                    '''
+                }
+            }
+        }
+
+ stage('Build Docker Image') {
+            steps {
+                script {
+                    sh '''
+                    docker build -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}:${IMAGE_TAG} .
+                    '''
+                }
+            }
+        }
+
+        stage('Push to Artifact Registry') {
+            steps {
+                script {
+                    sh '''
+                    docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}:${IMAGE_TAG}
+                    '''
+                }
+            }
+        }
+
+        
