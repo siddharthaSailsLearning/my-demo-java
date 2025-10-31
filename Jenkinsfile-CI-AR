@@ -33,26 +33,32 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t $IMAGE_NAME:V$IMAGE_TAG .'
+                script {
+                    sh '''
+                    docker build -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}:${IMAGE_TAG} .
+                    '''
+                }
             }
         }
 
-        stage('Authenticate with Artifact Registry') {
+        stage('Setup GCP Auth') {
             steps {
-                echo "🔐 Authenticating with Google Artifact Registry..."
-                withCredentials([file(credentialsId: 'GCP_SERVICE_ACCOUNT_KEY', variable: 'GCP_KEY_FILE')]) {
-                    sh "cat \$GCP_KEY_FILE | docker login -u _json_key --password-stdin https://${ARTIFACT_REGISTRY_HOST}"
-                echo "Login Successful ☑️"
+                withCredentials([file(credentialsId: 'gcp-service-account', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
+                    sh '''
+                    gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+                    gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+                    '''
                 }
             }
         }
       
-        stage('Tag and Push Image') {
+        stage('Push to Artifact Registry') {
             steps {
-                echo "📦 Tagging image as ${FULL_IMAGE_NAME}"
-                sh "docker tag ${IMAGE_NAME}:V${IMAGE_TAG} ${FULL_IMAGE_NAME}"
-                echo "🚀 Pushing image to Artifact Registry..."
-                sh "docker push ${FULL_IMAGE_NAME}"
+                script {
+                    sh '''
+                    docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}:${IMAGE_TAG}
+                    '''
+                }
             }
         }
 }
