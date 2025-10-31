@@ -58,7 +58,7 @@ pipeline {
                 sh 'docker push $IMAGE_NAME:V$IMAGE_TAG'
             }
         }
-
+}
       
     post {
         success {
