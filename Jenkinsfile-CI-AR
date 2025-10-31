@@ -6,7 +6,7 @@ pipeline {
     }
 
     parameters {
-        string(name: 'PROJECT_ID', defaultValue: '8197923751', description: 'GCP Project ID')
+        string(name: 'PROJECT_ID', defaultValue: 'fluted-factor-438905-d2', description: 'GCP Project ID')
         string(name: 'REPO_NAME', defaultValue: 'jenkins-ci-cd-ar', description: 'Artifact Registry Repo Name')
         string(name: 'REPO_LOCATION', defaultValue: 'us-central1', description: 'Artifact Registry Location')
     }
