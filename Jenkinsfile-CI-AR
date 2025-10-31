@@ -13,6 +13,7 @@ pipeline {
 
     environment {
         GCP_CREDENTIALS = credentials('GCP_SERVICE_ACCOUNT_KEY')
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds')
         IMAGE_NAME = "javaapplication"
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         PROJECT_ID = "${params.PROJECT_ID}"
@@ -51,6 +52,10 @@ pipeline {
                 sh "docker tag ${DOCKERHUB_REPO}:V${IMAGE_TAG} ${FULL_IMAGE_NAME}"
                 echo "🚀 Pushing image to Artifact Registry..."
                 sh "docker push ${FULL_IMAGE_NAME}"
+                
+                // for trail docker login and dockerhub push 
+                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+                sh 'docker push $IMAGE_NAME:V$IMAGE_TAG'
             }
         }
 
