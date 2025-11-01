@@ -18,7 +18,7 @@ pipeline {
     PROJECT_ID = "${params.PROJECT_ID}"
     REGION = "${params.REPO_LOCATION}"
     CLUSTER = "${params.CLUSTER_NAME}"
-    GCP_CRED_ID = credentials('GCP_SERVICE_ACCOUNT_KEY')
+    GCP_CREDENTIALS = credentials('GCP_SERVICE_ACCOUNT_KEY')
     K8S_NAMESPACE = 'default'
     REPO = "${params.REPO_NAME}"
     IMAGE_NAME = "javaapplication"
@@ -30,7 +30,7 @@ pipeline {
   stages {
     stage('Prepare gcloud & kubectl') {
       steps {
-        withCredentials([file(credentialsId: env.GCP_CRED_ID, variable: 'GCP_KEY_FILE')]) {
+        withCredentials([file(credentialsId: GCP_SERVICE_ACCOUNT_KEY	, variable: 'GCP_KEY_FILE')]) {
           sh '''
             set -e
             echo "Activating service account..."
