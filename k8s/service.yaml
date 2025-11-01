@@ -4,7 +4,7 @@ metadata:
   name: sample-app-svc
 spec:
   selector:
-    app: sample-app
+    app: sample-javaapp
   ports:
   - protocol: TCP
     port: 80
