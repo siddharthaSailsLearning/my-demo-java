@@ -11,6 +11,7 @@ pipeline {
         string(name: 'REPO_NAME', defaultValue: 'jenkins-ci-cd-ar', description: 'Artifact Registry Repo Name')
         string(name: 'REPO_LOCATION', defaultValue: 'us-central1', description: 'Artifact Registry Location')
         string(name: 'CLUSTER_NAME', defaultValue: 'jenkins-deploy-cluster', description: 'Cluster Name')
+        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Image Tag')
     }  
     
   environment {
