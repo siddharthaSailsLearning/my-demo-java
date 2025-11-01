@@ -1,0 +1,203 @@
+GCP side Setup
+  
+> gcloud config set project YOUR_PROJECT_ID
+
+  enable api's
+> gcloud services enable container.googleapis.com artifactregistry.googleapis.com iam.googleapis.com containeranalysis.googleapis.com
+
+  create cluster - last enables workload identity
+> gcloud container clusters create jenkins-deploy-cluster --region us-central1 --num-nodes=1 --machine-type=e2-medium --workload-pool=fluted-factor-438905-d2.svc.id.goog
+
+granting artifact registery reader access
+> gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/artifactregistry.reader"
+  
+Creating Node Pool
+> gcloud container node-pools create node-pool-pullers --cluster=jenkins-deploy-cluster --region=us-central1 --num-nodes=1 --service-account=siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com
+
+
+  
+###(Optional) Create a K8s service account and bind to GCP SA (Workload Identity)
+> gcloud iam service-accounts create my-app-sa --display-name="my-app-sa"
+  
+> gcloud iam service-accounts add-iam-policy-binding my-app-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com --role roles/iam.workloadIdentityUser --member "serviceAccount:fluted-factor-438905-d2.svc.id.goog[default/my-app-k8s-sa]"
+
+  > kubectl create serviceaccount my-app-k8s-sa
+  > kubectl annotate serviceaccount my-app-k8s-sa iam.gke.io/gcp-service-account=my-app-sa@fluted-factor-438905-d2.iam.gserviceaccount.com
+
+
+
+
+  SECTION B — Jenkins side 
+
+  Service Account binding
+  > gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/container.developer"
+
+  Allow view/get clusters
+  > gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/container.clusters.get"
+
+  allow to impersonate if you need: roles/iam.serviceAccountUser (for Workload Identity usage)
+  > gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/iam.serviceAccountUser"
+
+
+
+  
+  SECTION C — Kubernetes manifests
+
+  
+  k8s/deployment.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-javaapp
+  labels:
+    app: sample-javaapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sample-javaapp
+  template:
+    metadata:
+      labels:
+        app: sample-javaapp
+    spec:
+      containers:
+      - name: sample-javaapp
+        image: us-central1-docker.pkg.dev/fluted-factor-438905-d2/jenkins-ci-cd-ar/javaapplication
+        ports:
+        - containerPort: 8080
+
+k8s/service.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-app-svc
+spec:
+  selector:
+    app: sample-app
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: LoadBalancer
+
+
+
+
+SECTION D — Jenkinsfile for CD
+
+    
+pipeline {
+  agent {
+    docker {
+      image 'google/cloud-sdk:slim' 
+      args '-u root:root' // run as root so we can install packages if needed
+    }
+  }
+
+  parameters {
+        string(name: 'PROJECT_ID', defaultValue: 'fluted-factor-438905-d2', description: 'GCP Project ID')
+        string(name: 'REPO_NAME', defaultValue: 'jenkins-ci-cd-ar', description: 'Artifact Registry Repo Name')
+        string(name: 'REPO_LOCATION', defaultValue: 'us-central1', description: 'Artifact Registry Location')
+        string(name: 'CLUSTER_NAME', defaultValue: 'jenkins-deploy-cluster', description: 'Cluster Name')
+    }  
+    
+  environment {
+    PROJECT_ID = "${params.PROJECT_ID}"
+    REGION = "${params.REPO_LOCATION}"
+    CLUSTER = "${params.CLUSTER_NAME}"
+    GCP_CRED_ID = credentials('GCP_SERVICE_ACCOUNT_KEY')
+    K8S_NAMESPACE = 'default'
+    REPO = "${params.REPO_NAME}"
+    IMAGE_NAME = "javaapplication"
+    ARTIFACT_REGISTRY_HOST = "${REPO_LOCATION}-docker.pkg.dev"
+    FULL_IMAGE_NAME = "${ARTIFACT_REGISTRY_HOST}/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}"
+    DEPLOY_METHOD = 'kubectl' 
+  }
+
+  stages {
+    stage('Prepare gcloud & kubectl') {
+      steps {
+        withCredentials([file(credentialsId: env.GCP_CRED_ID, variable: 'GCP_KEY_FILE')]) {
+          sh '''
+            set -e
+            echo "Activating service account..."
+            gcloud auth activate-service-account --key-file=$GCP_KEY_FILE
+            gcloud config set project ${PROJECT_ID}
+            # Install kubectl (if not present)
+            if ! command -v kubectl >/dev/null 2>&1; then
+              echo "Installing kubectl..."
+              apt-get update -qq
+              apt-get install -y -qq ca-certificates curl gnupg
+              curl -fsSLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+              install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+            fi
+
+            echo "Getting cluster credentials..."
+            gcloud container clusters get-credentials ${CLUSTER} --region ${REGION} --project ${PROJECT_ID}
+            kubectl config current-context
+          '''
+        }
+      }
+    }
+
+    stage('Deploy Kubectl') {
+      steps {
+        script {
+          // get the image tag from pipeline parameters or env. This should be provided by CI push or param
+          def imageTag = params.IMAGE_TAG ?: 'latest'
+          def fullImage = "${IMAGE}:${imageTag}"
+          sh """
+            echo "Updating deployment to image: ${fullImage}"
+            # Option A: use kubectl set image (works if deployment exists)
+            kubectl -n ${K8S_NAMESPACE} set image deployment/sample-app sample-app=${fullImage} --record
+
+            # Optionally wait for rollout
+            kubectl -n ${K8S_NAMESPACE} rollout status deployment/sample-app --timeout=120s
+          """
+        }
+      }
+    }
+
+    stage('Post-deploy checks') {
+      steps {
+        sh """
+          kubectl -n ${K8S_NAMESPACE} get pods -l app=sample-app -o wide
+          kubectl -n ${K8S_NAMESPACE} get svc sample-app-svc -o wide || true
+        """
+      }
+    }
+  }
+
+  post {
+    failure {
+      echo 'Deployment failed — check logs and rollout status.'
+    }
+    success {
+      echo 'Deployment successful.'
+    }
+  }
+}
+
+
+
+
+
+SECTION E — How CI → CD integration
+
+  build job: 'cd-deploy-job', parameters: [string(name: 'IMAGE_TAG', value: "${IMAGE_TAG}")]
+
+
+
+SECTION F — Alternative: imagePullSecret (if not granting nodes permission)
+
+> gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/artifactregistry.reader"
+
+
+
+
+
+
+
