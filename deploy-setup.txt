@@ -14,7 +14,7 @@ granting artifact registery reader access
 > gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/artifactregistry.reader"
   
 Creating Node Pool
-> gcloud container node-pools create node-pool-pullers --cluster=jenkins-deploy-cluster --region=us-central1 --num-nodes=1 --service-account=siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com
+> gcloud container node-pools create node-pool-pullers --cluster=jenkins-deploy-cluster --region=us-central1 --num-nodes=1 --disk-type=pd-standard --service-account=siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com
 
 
   
