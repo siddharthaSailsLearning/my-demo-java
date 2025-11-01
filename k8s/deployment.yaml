@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-javaapp
+  labels:
+    app: sample-javaapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sample-javaapp
+  template:
+    metadata:
+      labels:
+        app: sample-javaapp
+    spec:
+      containers:
+      - name: sample-javaapp
+        image: us-central1-docker.pkg.dev/fluted-factor-438905-d2/jenkins-ci-cd-ar/javaapplication
+        ports:
+        - containerPort: 8080
