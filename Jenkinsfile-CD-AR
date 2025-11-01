@@ -1,0 +1,91 @@
+pipeline {
+  agent {
+    docker {
+      image 'google/cloud-sdk:slim' 
+      args '-u root:root' // run as root so we can install packages if needed
+    }
+  }
+
+  parameters {
+        string(name: 'PROJECT_ID', defaultValue: 'fluted-factor-438905-d2', description: 'GCP Project ID')
+        string(name: 'REPO_NAME', defaultValue: 'jenkins-ci-cd-ar', description: 'Artifact Registry Repo Name')
+        string(name: 'REPO_LOCATION', defaultValue: 'us-central1', description: 'Artifact Registry Location')
+        string(name: 'CLUSTER_NAME', defaultValue: 'jenkins-deploy-cluster', description: 'Cluster Name')
+    }  
+    
+  environment {
+    PROJECT_ID = "${params.PROJECT_ID}"
+    REGION = "${params.REPO_LOCATION}"
+    CLUSTER = "${params.CLUSTER_NAME}"
+    GCP_CRED_ID = credentials('GCP_SERVICE_ACCOUNT_KEY')
+    K8S_NAMESPACE = 'default'
+    REPO = "${params.REPO_NAME}"
+    IMAGE_NAME = "javaapplication"
+    ARTIFACT_REGISTRY_HOST = "${REPO_LOCATION}-docker.pkg.dev"
+    FULL_IMAGE_NAME = "${ARTIFACT_REGISTRY_HOST}/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}"
+    DEPLOY_METHOD = 'kubectl' 
+  }
+
+  stages {
+    stage('Prepare gcloud & kubectl') {
+      steps {
+        withCredentials([file(credentialsId: env.GCP_CRED_ID, variable: 'GCP_KEY_FILE')]) {
+          sh '''
+            set -e
+            echo "Activating service account..."
+            gcloud auth activate-service-account --key-file=$GCP_KEY_FILE
+            gcloud config set project ${PROJECT_ID}
+            # Install kubectl (if not present)
+            if ! command -v kubectl >/dev/null 2>&1; then
+              echo "Installing kubectl..."
+              apt-get update -qq
+              apt-get install -y -qq ca-certificates curl gnupg
+              curl -fsSLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+              install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+            fi
+
+            echo "Getting cluster credentials..."
+            gcloud container clusters get-credentials ${CLUSTER} --region ${REGION} --project ${PROJECT_ID}
+            kubectl config current-context
+          '''
+        }
+      }
+    }
+
+    stage('Deploy Kubectl') {
+      steps {
+        script {
+          // get the image tag from pipeline parameters or env. This should be provided by CI push or param
+          def imageTag = params.IMAGE_TAG ?: 'latest'
+          def fullImage = "${IMAGE}:${imageTag}"
+          sh """
+            echo "Updating deployment to image: ${fullImage}"
+            # Option A: use kubectl set image (works if deployment exists)
+            kubectl -n ${K8S_NAMESPACE} set image deployment/sample-app sample-app=${fullImage} --record
+
+            # Optionally wait for rollout
+            kubectl -n ${K8S_NAMESPACE} rollout status deployment/sample-app --timeout=120s
+          """
+        }
+      }
+    }
+
+    stage('Post-deploy checks') {
+      steps {
+        sh """
+          kubectl -n ${K8S_NAMESPACE} get pods -l app=sample-app -o wide
+          kubectl -n ${K8S_NAMESPACE} get svc sample-app-svc -o wide || true
+        """
+      }
+    }
+  }
+
+  post {
+    failure {
+      echo 'Deployment failed — check logs and rollout status.'
+    }
+    success {
+      echo 'Deployment successful.'
+    }
+  }
+}
