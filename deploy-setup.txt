@@ -8,6 +8,8 @@ GCP side Setup
   create cluster - last enables workload identity
 > gcloud container clusters create jenkins-deploy-cluster --region us-central1 --num-nodes=1 --machine-type=e2-medium --workload-pool=fluted-factor-438905-d2.svc.id.goog
 
+------------------ gcloud components install kubectl --------- for plugin :  gke-gcloud-auth-plugin
+
 granting artifact registery reader access
 > gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/artifactregistry.reader"
   
