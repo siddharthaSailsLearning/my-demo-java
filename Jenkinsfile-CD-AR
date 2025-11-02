@@ -101,11 +101,6 @@ pipeline {
 
             kubectl -n $K8S_NAMESPACE rollout status deployment/sample-javaapp --timeout=120s
 
-
-            //echo "Deploying image: $FULL_IMAGE_NAME"
-            //kubectl -n $K8S_NAMESPACE set image deployment/sample-javaapp sample-javaapp=$FULL_IMAGE_NAME --record
-
-            //kubectl -n $K8S_NAMESPACE rollout status deployment/sample-javaapp --timeout=120s
           """
         }
       }
