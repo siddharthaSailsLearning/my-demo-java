@@ -2,7 +2,7 @@ pipeline {
   agent {
     docker {
       image 'google/cloud-sdk:slim' 
-      args '-u root:root' // run as root so we can install packages if needed
+      args '-u root:root' 
     }
   }
 
@@ -11,6 +11,7 @@ pipeline {
         string(name: 'REPO_NAME', defaultValue: 'jenkins-ci-cd-ar', description: 'Artifact Registry Repo Name')
         string(name: 'REPO_LOCATION', defaultValue: 'us-central1', description: 'Artifact Registry Location')
         string(name: 'CLUSTER_NAME', defaultValue: 'jenkins-deploy-cluster', description: 'Cluster Name')
+        string(name: 'IMAGE_NAME', defaultValue: 'javaapplication', description: 'Image Name')
         string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Image Tag')
     }  
     
@@ -20,21 +21,21 @@ pipeline {
     CLUSTER = "${params.CLUSTER_NAME}"
     K8S_NAMESPACE = 'default'
     REPO = "${params.REPO_NAME}"
-    IMAGE_NAME = "javaapplication"
-    ARTIFACT_REGISTRY_HOST = "${REPO_LOCATION}-docker.pkg.dev"
-    FULL_IMAGE_NAME = "${ARTIFACT_REGISTRY_HOST}/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}:${params.IMAGE_TAG}"
+    IMAGE = "${params.IMAGE_NAME}"
+    ARTIFACT_REGISTRY_HOST = "${params.REPO_LOCATION}-docker.pkg.dev"
+    FULL_IMAGE_NAME = "${ARTIFACT_REGISTRY_HOST}/${PROJECT_ID}/${REPO}/${IMAGE}:${params.IMAGE_TAG}"
     DEPLOY_METHOD = 'kubectl' 
   }
 
   stages {
     stage('Authenticate & Configure') {
       steps {
-        withCredentials([file(credentialsId: GCP_SERVICE_ACCOUNT_KEY	, variable: 'GCP_KEY_FILE')]) {
+        withCredentials([file(credentialsId: 'GCP_SERVICE_ACCOUNT_KEY'	, variable: 'GCP_KEY_FILE')]) {
           sh '''
             set -e
             echo "Activating service account..."
             gcloud auth activate-service-account --key-file=$GCP_KEY_FILE
-            gcloud config set project ${PROJECT_ID}
+            gcloud config set project $PROJECT_ID
 
             echo "Installing kubectl if missing..."
             if ! command -v kubectl >/dev/null 2>&1; then
@@ -46,7 +47,7 @@ pipeline {
             fi
 
             echo "Getting cluster credentials..."
-            gcloud container clusters get-credentials ${CLUSTER} --region ${REGION} --project ${PROJECT_ID}
+            gcloud container clusters get-credentials $CLUSTER --region $REGION --project $PROJECT_ID
             kubectl config current-context
           '''
         }
@@ -57,10 +58,10 @@ pipeline {
       steps {
         script {
           sh """
-            echo "Deploying image: ${FULL_IMAGE_NAME}"
-            kubectl -n ${K8S_NAMESPACE} set image deployment/sample-javaapp sample-javaapp=${FULL_IMAGE_NAME} --record
+            echo "Deploying image: $FULL_IMAGE_NAME"
+            kubectl -n $K8S_NAMESPACE set image deployment/sample-javaapp sample-javaapp=$FULL_IMAGE_NAME --record
 
-            kubectl -n ${K8S_NAMESPACE} rollout status deployment/sample-javaapp --timeout=120s
+            kubectl -n $K8S_NAMESPACE rollout status deployment/sample-javaapp --timeout=120s
           """
         }
       }
@@ -70,9 +71,9 @@ pipeline {
       steps {
         sh """
           echo "Checking pod status..."
-          kubectl -n ${K8S_NAMESPACE} get pods -l app=sample-javaapp -o wide
+          kubectl -n $K8S_NAMESPACE get pods -l app=sample-javaapp -o wide
           echo "Checking service status..."
-          kubectl -n ${K8S_NAMESPACE} get svc sample-javaapp-svc -o wide || true
+          kubectl -n $K8S_NAMESPACE get svc sample-javaapp-svc -o wide || true
         """
       }
     }
