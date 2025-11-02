@@ -52,7 +52,7 @@ pipeline {
             # ensure keyrings dir exists and proper permissions
             mkdir -p /etc/apt/keyrings
             curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
-              | gpg --dearmor -o /etc/apt/keyrings/google-cloud-cli.gpg
+              | gpg --batch --yes --dearmor -o /etc/apt/keyrings/google-cloud-cli.gpg
 
 
             # Use the keyring in the sources.list entry (avoid using apt-key)
