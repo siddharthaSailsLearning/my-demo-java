@@ -12,7 +12,6 @@ pipeline {
     }
 
     environment {
-        GCP_CREDENTIALS = credentials('GCP_SERVICE_ACCOUNT_KEY')
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds')
         IMAGE_NAME = "javaapplication"
         IMAGE_TAG = "${env.BUILD_NUMBER}"
