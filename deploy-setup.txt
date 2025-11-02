@@ -37,6 +37,10 @@ Creating Node Pool
   Allow view/get clusters
   > gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/container.clusters.get"
 
+----------or-------^
+
+  > gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/container.viewer"
+
   allow to impersonate if you need: roles/iam.serviceAccountUser (for Workload Identity usage)
   > gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/iam.serviceAccountUser"
 
