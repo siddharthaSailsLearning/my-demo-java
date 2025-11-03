@@ -38,7 +38,7 @@ pipeline {
 
         stage('Authenticate with Artifact Registry') {
             steps {
-                echo "🔐 Authenticating with Google Artifact Registry..."
+                echo "Authenticating with Google Artifact Registry..."
                 withCredentials([file(credentialsId: 'GCP_SERVICE_ACCOUNT_KEY', variable: 'GCP_KEY_FILE')]) {
                     sh "cat \$GCP_KEY_FILE | docker login -u _json_key --password-stdin https://${ARTIFACT_REGISTRY_HOST}"
                 echo "Login Successful ☑️"
@@ -48,9 +48,9 @@ pipeline {
       
         stage('Tag and Push Image') {
             steps {
-                echo "📦 Tagging image as ${FULL_IMAGE_NAME}"
+                echo "Tagging image as ${FULL_IMAGE_NAME}"
                 sh "docker tag ${IMAGE_NAME}:V${IMAGE_TAG} ${FULL_IMAGE_NAME}"
-                echo "🚀 Pushing image to Artifact Registry..."
+                echo "Pushing image to Artifact Registry..."
                 sh "docker push ${FULL_IMAGE_NAME}"
             }
         }
@@ -58,13 +58,8 @@ pipeline {
       
     post {
         success {
-            // echo "✅ CI pipeline successful — triggering CD pipeline..."
             build job: 'jenkins-cd-ar', parameters: [string(name: 'IMAGE_TAG', value: "V${IMAGE_TAG}")], propagate: false, wait: true
-            echo "✅ CI pipeline completed successfully."
-        }
-        failure {
-            // echo "❌ CI pipeline failed — CD will not run."
-            echo "❌ CI pipeline failed. Check logs for details."
+           
         }
     }
 }
