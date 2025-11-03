@@ -99,7 +99,7 @@ pipeline {
               kubectl apply -f k8s/service.yaml
             fi
 
-            kubectl -n $K8S_NAMESPACE rollout status deployment/sample-javaapp --timeout=120s
+            kubectl -n $K8S_NAMESPACE rollout status deployment/sample-javaapp --timeout=300s
 
           """
         }
