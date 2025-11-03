@@ -1,2 +1,11 @@
 target
 .ufo
+settings.txt
+deploy-setup.txt
+azure-pipelines.yml
+Jenkinsfile
+Jenkinsfile-CD
+Jenkinsfile-CD-AR
+Jenkinsfile-CI
+Jenkinsfile-CI-AR
+README.md
