@@ -10,7 +10,7 @@ public class Hello extends HttpServlet {
 
    public void init() throws ServletException {
       // Do required initialization
-      message = "trigger working - 2 pipeline test";
+      message = "Hello Visitor thsnkyou for your atention";
    }
 
    public void doGet(HttpServletRequest request, HttpServletResponse response)
