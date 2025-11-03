@@ -50,6 +50,7 @@ pipeline {
             steps {
                 echo "📦 Tagging image as ${FULL_IMAGE_NAME}"
                 sh "docker tag ${IMAGE_NAME}:V${IMAGE_TAG} ${FULL_IMAGE_NAME}"
+                sh "docker tag ${IMAGE_NAME}:latest ${FULL_IMAGE_NAME}"
                 echo "🚀 Pushing image to Artifact Registry..."
                 sh "docker push ${FULL_IMAGE_NAME}"
             }
