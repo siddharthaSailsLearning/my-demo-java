@@ -93,10 +93,10 @@ pipeline {
             
             echo "Checking if deployment exists..."
             if kubectl -n $K8S_NAMESPACE get deployment sample-javaapp >/dev/null 2>&1; then
-              echo "✅ Deployment exists. Updating image..."
+              echo " Deployment exists. Updating image..."
               kubectl -n $K8S_NAMESPACE set image deployment/sample-javaapp sample-javaapp=$FULL_IMAGE_NAME
             else
-              echo "🚀 Deployment does NOT exist. Creating deployment..."
+              echo "Deployment does NOT exist. Creating deployment..."
               kubectl apply -f k8s/deployment.yaml
               kubectl apply -f k8s/service.yaml
             fi
@@ -122,10 +122,10 @@ pipeline {
 
   post {
     failure {
-      echo '❌ Deployment failed — check logs and rollout status.'
+      echo 'Deployment failed — check logs and rollout status.'
     }
     success {
-      echo '✅ Deployment successful.'
+      echo 'Deployment successful.'
     }
   }
 }
