@@ -59,7 +59,7 @@ pipeline {
     post {
         success {
             // echo "✅ CI pipeline successful — triggering CD pipeline..."
-            build job: 'jenkins-cd-ar', parameters: [string(name: 'IMAGE_TAG', value: "${IMAGE_TAG}")], propagate: false, wait: true
+            build job: 'jenkins-cd-ar', parameters: [string(name: 'IMAGE_TAG', value: "V${IMAGE_TAG}")], propagate: false, wait: true
             echo "✅ CI pipeline completed successfully."
         }
         failure {
