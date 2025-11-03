@@ -7,7 +7,7 @@ COPY . .
 RUN mvn clean package -DskipTests
 
 FROM tomcat:8.5-jdk17-temurin
-LABEL maintainer="siddhussoft136"
+#LABEL maintainer="siddhussoft136"
 
 RUN apt-get update && \
     apt-get install -y net-tools tree vim && \
