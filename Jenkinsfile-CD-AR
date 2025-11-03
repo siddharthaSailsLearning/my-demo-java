@@ -89,6 +89,8 @@ pipeline {
         script {
           sh """
 
+            echo "The Image tag got is ${params.IMAGE_TAG}"
+            
             echo "Checking if deployment exists..."
             if kubectl -n $K8S_NAMESPACE get deployment sample-javaapp >/dev/null 2>&1; then
               echo "✅ Deployment exists. Updating image..."
