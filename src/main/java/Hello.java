@@ -10,7 +10,7 @@ public class Hello extends HttpServlet {
 
    public void init() throws ServletException {
       // Do required initialization
-      message = "Hello Visitor Welcome to Perminant Page";
+      message = "Presenting jenkins triger ci-cd";
    }
 
    public void doGet(HttpServletRequest request, HttpServletResponse response)
