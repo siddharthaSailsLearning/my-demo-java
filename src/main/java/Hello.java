@@ -10,7 +10,7 @@ public class Hello extends HttpServlet {
 
    public void init() throws ServletException {
       // Do required initialization
-      message = "loadbalancer problem solved";
+      message = "Triggered from feaure branch";
    }
 
    public void doGet(HttpServletRequest request, HttpServletResponse response)
