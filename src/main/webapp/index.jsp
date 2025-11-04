@@ -1,5 +1,5 @@
 <html>
 <body>
-<h2>Hello Viewer..!Tankyou for visiting my webpage after branch updation</h2>
+<h2>Hello Viewer..!</h2>
 </body>
 </html>
