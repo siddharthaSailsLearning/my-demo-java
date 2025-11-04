@@ -19,16 +19,12 @@ steps:
     docker build -t $(IMAGE_NAME):$(IMAGE_TAG) -t $(IMAGE_NAME):latest .
   displayName: 'Build Docker Image'
 
-- task: Docker@2
-  displayName: 'Login to Docker Hub'
-  inputs:
-    command: login
-    containerRegistry: 'dockerhub-acc'  
 
 - script: |
-    docker push $(IMAGE_NAME):$(IMAGE_TAG)
-    docker push $(IMAGE_NAME):latest
-  displayName: 'Push Image to DockerHub'
+    mkdir -p $(Build.ArtifactStagingDirectory)
+    docker save $(IMAGE_NAME):$(IMAGE_TAG) -o $(Build.ArtifactStagingDirectory)/java-app-$(IMAGE_TAG).tar
+  displayName: 'Export Docker Image to TAR'
+
 - task: PublishBuildArtifacts@1
   inputs:
     PathtoPublish: '$(Build.ArtifactStagingDirectory)'
