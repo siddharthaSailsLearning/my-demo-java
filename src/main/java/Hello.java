@@ -10,7 +10,7 @@ public class Hello extends HttpServlet {
 
    public void init() throws ServletException {
       // Do required initialization
-      message = "Presenting jenkins triger ci-cd";
+      message = "loadbalancer problem solved";
    }
 
    public void doGet(HttpServletRequest request, HttpServletResponse response)
