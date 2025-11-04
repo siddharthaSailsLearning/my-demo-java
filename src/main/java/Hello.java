@@ -10,7 +10,7 @@ public class Hello extends HttpServlet {
 
    public void init() throws ServletException {
       // Do required initialization
-      message = "Triggered from feaure branch";
+      message = "Triggered from feaure branch multi-branch";
    }
 
    public void doGet(HttpServletRequest request, HttpServletResponse response)
