@@ -1,0 +1,18 @@
+Enable APIs:
+
+gcloud config set project fluted-factor-438905-d2
+gcloud services enable artifactregistry.googleapis.com
+gcloud services enable iam.googleapis.com
+
+
+
+Create an Artifact Registry docker repository
+
+gcloud artifacts repositories create Azure-dev-artif-reg --repository-format=docker --location=us-central1 --description="Docker images for CI"
+
+
+# Artifact Registry writer role is enough for pushing images
+gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/artifactregistry.writer"
+
+
+
