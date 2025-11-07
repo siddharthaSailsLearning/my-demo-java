@@ -1,96 +1,3 @@
-
-
-# trigger:
-#   branches:
-#     include:
-#       - azure-pipelines-ci
-
-# pr:
-#   branches:
-#     include:
-#       - azure-pipelines-ci
-
-# pool:
-#   vmImage: 'ubuntu-latest'
-
-# variables:
-# - group: ci-pipeline-vars
-# - name: IMAGE_TAG
-#   value: '$(Build.BuildId)'
-
-# stages:
-#   - stage: Build_And_Push
-#     displayName: Build and Push to GAR
-#     jobs:
-
-#       # Job 1: Install gcloud SDK and authenticate
-#       - job: Auth_GCP
-#         displayName: Authenticate to Google Cloud
-#         steps:
-#           - task: DownloadSecureFile@1
-#             name: DownloadGcpKey
-#             inputs:
-#               secureFile: '$(SERVICE_ACCOUNT_SECUREFILE)'
-
-#           - script: |
-#               set -e
-#               echo "Installing gcloud SDK..."
-#               sudo apt-get update -y
-#               sudo apt-get install -y apt-transport-https ca-certificates gnupg curl lsb-release
-#               echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
-#               curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
-#               sudo apt-get update -y
-#               sudo apt-get install -y google-cloud-sdk
-#             displayName: 'Install gcloud SDK'
-
-#           - script: |
-#               set -e
-#               echo "Authenticating to Google Cloud..."
-#               KEY_DIR="$(System.DefaultWorkingDirectory)/gcp"
-#               mkdir -p "$KEY_DIR"
-#               mv "$(DownloadGcpKey.secureFilePath)" "$KEY_DIR/$(SERVICE_ACCOUNT_SECUREFILE)"
-#               chmod 600 "$KEY_DIR/$(SERVICE_ACCOUNT_SECUREFILE)"
-#               export GOOGLE_APPLICATION_CREDENTIALS="$KEY_DIR/$(SERVICE_ACCOUNT_SECUREFILE)"
-#               gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
-#               gcloud config set project $(PROJECT_ID)
-#               gcloud auth configure-docker $(LOCATION)-docker.pkg.dev --quiet
-#             displayName: 'Configure Docker Auth for GAR'
-#             env:
-#               CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: '$(System.DefaultWorkingDirectory)/gcp/$(SERVICE_ACCOUNT_SECUREFILE)'
-
-#       - job: Build_Image
-#         displayName: Build Docker Image
-#         dependsOn: Auth_GCP
-#         steps:
-#           - script: |
-#               set -e
-#               echo "Building Docker image..."
-#               IMAGE_URI="$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
-#               echo "IMAGE_URI = $IMAGE_URI"
-#               docker build -t "$IMAGE_URI" .
-#             displayName: 'Build Docker Image'
-
-#       - job: Push_Image
-#         displayName: Push Docker Image to GAR
-#         dependsOn: Build_Image
-#         steps:
-#           - script: |
-#               set -e
-#               echo "Pushing Docker image..."
-#               IMAGE_URI="$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
-#               docker push "$IMAGE_URI"
-#               echo "Image pushed: $IMAGE_URI"
-#             displayName: 'Push Docker Image'
-#             env:
-#               CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: '$(System.DefaultWorkingDirectory)/gcp/$(SERVICE_ACCOUNT_SECUREFILE)'
-
-#           - script: |
-#               set -e
-#               echo "Cleaning up credentials..."
-#               rm -f "$(System.DefaultWorkingDirectory)/gcp/$(SERVICE_ACCOUNT_SECUREFILE)"
-#             displayName: 'Clean Up Credentials'
-
-
 trigger:
   branches:
     include:
@@ -161,7 +68,7 @@ stages:
               echo "IMAGE_URI = $IMAGE_URI"
 
               # build
-              docker build -t "$IMAGE_URI" -t "$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):latest" .
+              docker build -t "$IMAGE_URI" -t .
 
               # push
               docker push "$IMAGE_URI"

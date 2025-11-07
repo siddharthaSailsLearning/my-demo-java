@@ -6,6 +6,7 @@ trigger: none
 resources:
   pipelines:
     - pipeline: CI-pipeline-GAR 
+      Alias: cipipeline
       source: CI-pipeline-GAR
       trigger: true 
 
@@ -17,7 +18,7 @@ pool:
 variables:
 - group: cd-pipeline-vars
 - name: IMAGE_TAG
-  value: $[ resources['CI-pipeline-GAR'].runID ]
+  value: $(resources.pipeline.cipipeline.RunID)
 
 
 stages:
@@ -60,9 +61,8 @@ stages:
               gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
               gcloud config set project $(PROJECT_ID)
 
-              # If you used CI to push to GAR using gcloud auth configure-docker, the image is available in GAR now.
-              # Optionally configure docker auth in case container builds/pulls are done on this agent:
               gcloud auth configure-docker $(LOCATION)-docker.pkg.dev --quiet
+
             displayName: 'Install gcloud & kubectl and activate service account'
             env:
               CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: '$(System.DefaultWorkingDirectory)/gcp/$(SERVICE_ACCOUNT_SECUREFILE)'
@@ -80,8 +80,6 @@ stages:
               else
                 echo "Creating cluster $CLUSTER_NAME in zone $ZONE..."
 
-                # Create a small cluster with node service account that can pull from GAR
-                # Replace with your node count / machine type as needed
                 gcloud container clusters create "$CLUSTER_NAME" \
                   --zone "$ZONE" \
                   --num-nodes 1 \
@@ -95,16 +93,10 @@ stages:
 
               # Fetch kubeconfig credentials
               gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$ZONE" --project "$PROJECT"
+
             displayName: 'Create cluster if missing & get credentials'
             env:
               CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: '$(System.DefaultWorkingDirectory)/gcp/$(SERVICE_ACCOUNT_SECUREFILE)'
-
-          - script: |
-              echo "Verifying node service account permissions..."
-
-              # (This is informational; the actual grant should be done via IAM at infra time.)
-              echo "Make sure gke-node-sa@$PROJECT_ID.iam.gserviceaccount.com has roles/artifactregistry.reader"
-            displayName: 'Verify node SA has access to GAR'
 
           - script: |
               set -e
@@ -120,7 +112,7 @@ stages:
               kubectl apply -f $(System.DefaultWorkingDirectory)/k8s_work/service.yaml
 
               # optionally wait for rollout to complete
-              kubectl rollout status deployment/sample-javaapp --timeout=180s
+              kubectl rollout status deployment/sample-javaapp --timeout=300s
 
               echo "Deployment applied."
             displayName: 'Apply Kubernetes manifests (deploy image)'
