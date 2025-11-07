@@ -5,8 +5,8 @@ trigger: none
 
 resources:
   pipelines:
-    - pipeline: azure-pipelines-ci 
-      source: azure-pipelines-ci 
+    - pipeline: CI-pipeline-GAR 
+      source: CI-pipeline-GAR
       trigger: true 
 
 pr: none
@@ -100,7 +100,7 @@ stages:
 
           - script: |
               echo "Verifying node service account permissions..."
-              
+
               # (This is informational; the actual grant should be done via IAM at infra time.)
               echo "Make sure gke-node-sa@$PROJECT_ID.iam.gserviceaccount.com has roles/artifactregistry.reader"
             displayName: 'Verify node SA has access to GAR'
