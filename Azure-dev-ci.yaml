@@ -68,7 +68,7 @@ stages:
               echo "IMAGE_URI = $IMAGE_URI"
 
               # build
-              docker build -t "$IMAGE_URI" -t .
+              docker build -t "$IMAGE_URI" .
 
               # push
               docker push "$IMAGE_URI"
