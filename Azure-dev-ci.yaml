@@ -161,10 +161,7 @@ stages:
               echo "IMAGE_URI = $IMAGE_URI"
 
               # build
-              docker build -t "$IMAGE_URI" .
-
-              # tag
-              docker tag "$IMAGE_URI" "$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):latest"
+              docker build -t "$IMAGE_URI" -t "$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):latest" .
 
               # push
               docker push "$IMAGE_URI"
