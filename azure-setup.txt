@@ -8,7 +8,7 @@ gcloud services enable iam.googleapis.com
 
 Create an artifact Registry docker repository
 
-gcloud artifacts repositories create Azure-dev-artif-reg --repository-format=docker --location=us-central1 --description="Docker images for CI"
+gcloud artifacts repositories create azure-dev-artif-reg --repository-format=docker --location=us-central1 --description="Docker images for CI"
 
 
 # Artifact Registry writer role is enough for pushing images

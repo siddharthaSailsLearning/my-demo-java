@@ -53,12 +53,7 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  PROJECT_ID: 'YOUR_GCP_PROJECT_ID'       # GCP project id
-  LOCATION: 'us-central1'                 # region where Artifact Registry exists
-  REPOSITORY: 'my-repo'                   # artifact-registry repository
-  IMAGE_NAME: 'my-app'                    # image name
-  IMAGE_TAG: '$(Build.BuildId)'           # or use $(Build.SourceBranchName)-$(Build.BuildId)
-  SERVICE_ACCOUNT_SECUREFILE: 'gcp-service-account.json' # name of secure file uploaded
+- group: ci-pipeline-vars
 
 stages:
   - stage: Build_And_Push
@@ -68,13 +63,11 @@ stages:
         displayName: Build Docker image and push to Google Artifact Registry
         steps:
 
-          # 1) Download secure file (service account JSON) to the agent
           - task: DownloadSecureFile@1
             name: DownloadGcpKey
             inputs:
               secureFile: '$(SERVICE_ACCOUNT_SECUREFILE)'
 
-          # 2) Install prerequisites + Google Cloud SDK, enable docker auth
           - script: |
               set -e
               echo "Installing gcloud SDK and prerequisites..."
@@ -104,10 +97,8 @@ stages:
 
             displayName: 'Install gcloud & configure docker auth'
             env:
-              # Provide override to ensure gcloud uses the key file
               CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: '$(System.DefaultWorkingDirectory)/gcp/$(SERVICE_ACCOUNT_SECUREFILE)'
 
-          # 3) Build and push the Docker image
           - script: |
               set -e
               echo "Building Docker image and pushing to GAR..."
@@ -126,7 +117,6 @@ stages:
             env:
               CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: '$(System.DefaultWorkingDirectory)/gcp/$(SERVICE_ACCOUNT_SECUREFILE)'
 
-          # 4) Cleanup the key file
           - script: |
               set -e
               echo "Cleaning up service account key from agent..."
