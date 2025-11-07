@@ -5,8 +5,7 @@ trigger: none
 
 resources:
   pipelines:
-    - pipeline: CI-pipeline-GAR 
-      Alias: cipipeline
+    - pipeline: CI-pipeline-GAR
       source: CI-pipeline-GAR
       trigger: true 
 
@@ -18,7 +17,7 @@ pool:
 variables:
 - group: cd-pipeline-vars
 - name: IMAGE_TAG
-  value: $(resources.pipeline.cipipeline.RunID)
+  value: resources.pipeline.{Alias}.runID
 
 
 stages:
