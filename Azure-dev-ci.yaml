@@ -54,6 +54,7 @@ pool:
 
 variables:
 - group: ci-pipeline-vars
+  IMAGE_TAG: '$(Build.BuildId)'
 
 stages:
   - stage: Build_And_Push
