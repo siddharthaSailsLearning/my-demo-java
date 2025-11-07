@@ -19,3 +19,15 @@ spec:
         image: us-central1-docker.pkg.dev/fluted-factor-438905-d2/jenkins-ci-cd-ar/javaapplication
         ports:
         - containerPort: 8080
+        # readinessProbe:
+        #   httpGet:
+        #     path: /healthz
+        #     port: 8080
+        #   initialDelaySeconds: 10
+        #   periodSeconds: 5
+        # livenessProbe:
+        #   httpGet:
+        #     path: /healthz
+        #     port: 8080
+        #   initialDelaySeconds: 30
+        #   periodSeconds: 10
