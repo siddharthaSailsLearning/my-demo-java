@@ -17,7 +17,7 @@ pool:
 variables:
 - group: cd-pipeline-vars
 - name: IMAGE_TAG
-  value: $(resources.pipeline.ci.runId)
+  value: $(resources['CI-pipeline-GAR'].runID)
 
 stages:
   - stage: DeployToGKE
