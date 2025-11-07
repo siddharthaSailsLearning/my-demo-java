@@ -109,6 +109,9 @@ stages:
               # build
               docker build -t "$IMAGE_URI" .
 
+              # tag
+              docker tag "$IMAGE_URI" "$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):latest"
+
               # push
               docker push "$IMAGE_URI"
 
