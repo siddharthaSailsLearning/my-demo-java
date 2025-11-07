@@ -120,7 +120,7 @@ stages:
               kubectl apply -f $(System.DefaultWorkingDirectory)/k8s_work/service.yaml
 
               # optionally wait for rollout to complete
-              kubectl rollout status deployment/my-app --timeout=180s
+              kubectl rollout status deployment/sample-javaapp --timeout=180s
 
               echo "Deployment applied."
             displayName: 'Apply Kubernetes manifests (deploy image)'
