@@ -20,7 +20,7 @@ variables:
 
 stages:
 
-  - stage: GCP AUTH AND DEPLOY
+  - stage: GCP_AUTH_AND_DEPLOY
     displayName: "Authenticate to GCP (for kubectl/gcloud)"
     jobs:
       - job: GcpAuth
