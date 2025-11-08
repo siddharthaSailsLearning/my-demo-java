@@ -80,8 +80,8 @@ stages:
               script: |
                 set -euo pipefail
                 export USE_GKE_GCLOUD_AUTH_PLUGIN=True
-                echo "Fetching credentials for cluster $(GKE_CLUSTER)..."
-                gcloud container clusters get-credentials $(GKE_CLUSTER) --region $(GKE_REGION) --project $(PROJECT_ID)
+                echo "Fetching credentials for cluster $(CLUSTER_NAME)..."
+                gcloud container clusters get-credentials $(CLUSTER_NAME) --region $(LOCATION) --project $(PROJECT_ID)
                 kubectl config get-contexts
                 kubectl config current-context
                 kubectl get nodes
