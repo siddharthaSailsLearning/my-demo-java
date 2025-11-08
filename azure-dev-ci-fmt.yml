@@ -50,11 +50,14 @@ stages:
         steps:
           - checkout: self 
 
-          - script: |
-              IMAGE_URI="$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
-              echo "##vso[task.setvariable variable=IMAGE_URI]$IMAGE_URI"
-              echo "Building image: $IMAGE_URI"
-            displayName: "Set Image URI Variable"
+          - task: Bash@3
+            displayName: 'Authenticate with Google Cloud'
+            inputs:
+            targetType: 'inline'
+            script: |
+              echo $GCLOUD_SERVICE_KEY | base64 --decode > ${HOME}/gcloud-service-key.json
+              gcloud auth activate-service-account --key-file="$(DownloadGcpKey.secureFilePath)"
+              gcloud auth configure-docker $(LOCATION)-docker.pkg.dev 
 
           - task: Docker@2
             displayName: "Build Docker Image"
@@ -64,6 +67,12 @@ stages:
               dockerfile: '**/Dockerfile'
               tags: |
                 $(IMAGE_TAG)
+
+          - script: |
+              IMAGE_URI="$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
+              echo "##vso[task.setvariable variable=IMAGE_URI]$IMAGE_URI"
+              echo "Building image: $IMAGE_URI"
+            displayName: "GAR setup"
 
           - task: Docker@2
             displayName: "Push Docker Image to GAR"
