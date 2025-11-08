@@ -1,0 +1,84 @@
+trigger:
+  branches:
+    include:
+      - azure-pipelines-ci
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+- group: ci-pipeline-vars
+- name: IMAGE_TAG
+  value: '$(Build.BuildId)'
+
+stages:
+  - stage: Setup_GCP
+    displayName: "GCP GAR authentication"
+    jobs:
+      - job: GcpAuth
+        displayName: "Authenticate to GCP"
+        steps:
+          - task: DownloadSecureFile@1
+            name: DownloadGcpKey
+            displayName: "Downloading GCP service account key"
+            inputs: 
+              secureFile: '$(SERVICE_ACCOUNT_SECUREFILE)'
+          
+          - script: |
+              echo "Installing gcloud CLI..."
+              sudo apt-get update -y
+              sudo apt-get install -y apt-transport-https ca-certificates gnupg curl lsb-release
+              echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
+              curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+              sudo apt-get update -y && sudo apt-get install -y google-cloud-sdk
+
+              echo "Authenticating service account..."
+              gcloud auth activate-service-account --key-file="$(DownloadGcpKey.secureFilePath)"
+              gcloud config set project $(PROJECT_ID)
+              gcloud auth configure-docker $(LOCATION)-docker.pkg.dev --quiet
+            displayName: "Install gcloud & Configure Docker Auth"
+
+  - stage: Build_And_Push
+    displayName: "Build and Push docker image to GAR"
+    dependsOn: Setup_GCP
+    jobs:
+      - job: BuildPush
+        displayName: "Build and Push docker Image"
+        steps:
+          - checkout: self 
+
+          - script: |
+              IMAGE_URI="$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
+              echo "##vso[task.setvariable variable=IMAGE_URI]$IMAGE_URI"
+              echo "Building image: $IMAGE_URI"
+            displayName: "Set Image URI Variable"
+
+          - task: Docker@2
+            displayName: "Build Docker Image"
+            inputs: 
+              command: build
+              repository: '$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME)'
+              dockerfile: '**/Dockerfile'
+              tags: |
+                $(IMAGE_TAG)
+
+          - task: Docker@2
+            displayName: "Push Docker Image to GAR"
+            inputs:
+              command: push
+              repository: '$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME)'
+              tags: |
+                $(IMAGE_TAG)
+
+  - stage: Cleanup
+    displayName: "Cleanup Temporary Files"
+    dependsOn: Build_And_Push
+    jobs:
+      - job: Clean
+        displayName: "Remove Service Account Key"
+        steps:
+          - script: |
+              echo "Cleaning up secure key files..."
+              rm -f "$(DownloadGcpKey.secureFilePath)"
+              echo "Cleanup complete."
+            displayName: "Cleanup Service Account Key"
