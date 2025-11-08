@@ -1,0 +1,170 @@
+trigger: none   
+
+resources:
+  pipelines:
+    - pipeline: ciPipeline          
+      source: java-app-ci      
+      trigger:                    
+        branches:
+          include:
+            - azure-pipelines-ci     
+
+variables:
+  - group: ci-pipeline-vars
+  - name: IMAGE_TAG
+    value: $[ resources.pipeline.ciPipeline.runID ]  
+  - name: IMAGE_URI
+    value: $[ concat( variables.LOCATION, '-docker.pkg.dev/', variables.PROJECT_ID, '/', variables.REPOSITORY, '/', variables.IMAGE_NAME, ':', variables.IMAGE_TAG ) ]
+  - name: K8S_NAMESPACE
+    value: 'default'   
+
+stages:
+
+  - stage: Setup_GCP
+    displayName: "Authenticate to GCP (for kubectl/gcloud)"
+    jobs:
+      - job: GcpAuth
+        displayName: "Download service account key and install gcloud"
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: none
+
+          - task: DownloadSecureFile@1
+            name: DownloadGcpKey
+            displayName: "Download GCP service account key"
+            inputs:
+              secureFile: '$(SERVICE_ACCOUNT_SECUREFILE)'
+
+          - task: Bash@3
+            name: InstallGcloud
+            displayName: "Install Google Cloud SDK (if missing)"
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                if ! command -v gcloud >/dev/null; then
+                  echo "Installing google-cloud-sdk..."
+                  sudo apt-get update -y
+                  sudo apt-get install -y apt-transport-https ca-certificates gnupg curl lsb-release
+                  echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
+                  curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+                  sudo apt-get update -y
+                  sudo apt-get install -y google-cloud-sdk
+                else
+                  echo "gcloud already present: $(gcloud --version | head -n1)"
+                fi
+
+          - task: Bash@3
+            name: GcloudAuth
+            displayName: "Activate service account and set gcloud project"
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                echo "Activating service account from secure file..."
+                gcloud auth activate-service-account --key-file="$(DownloadGcpKey.secureFilePath)"
+                gcloud config set project $(PROJECT_ID)
+                gcloud auth configure-docker $(LOCATION)-docker.pkg.dev --quiet
+                echo "gcloud auth and docker configured."
+
+          - task: Bash@3
+            name: ExposeKeyPath
+            displayName: "Set service key path variable for following jobs (one-stage safety)"
+            inputs:
+              targetType: 'inline'
+              script: |
+                echo "##vso[task.setvariable variable=GCLOUD_KEY_PATH]$(DownloadGcpKey.secureFilePath)"
+                echo "GCLOUD_KEY_PATH is set"
+
+  - stage: Prepare_K8s
+    displayName: "Prepare cluster access"
+    dependsOn: Setup_GCP
+    jobs:
+      - job: GetCredentials
+        displayName: "Obtain GKE credentials and verify cluster access"
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: none
+
+          - task: Bash@3
+            name: ActivateAndGetCreds
+            displayName: "Activate SA and fetch GKE credentials"
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                echo "Using key: $(GCLOUD_KEY_PATH)"
+                gcloud auth activate-service-account --key-file="$(GCLOUD_KEY_PATH)"
+                gcloud config set project $(PROJECT_ID)
+                echo "Getting GKE credentials for cluster $(GKE_CLUSTER) in zone $(GKE_ZONE)..."
+                gcloud container clusters get-credentials $(GKE_CLUSTER) --zone $(GKE_ZONE) --project $(PROJECT_ID)
+                echo "kubectl version:"
+                kubectl version --client --short || true
+                kubectl get nodes --no-headers || true
+
+  - stage: Deploy
+    displayName: "Deploy to GKE"
+    dependsOn: Prepare_K8s
+    jobs:
+      - deployment: DeployToGKE
+        displayName: "Deploy image $(IMAGE_URI) to GKE namespace $(K8S_NAMESPACE)"
+        environment: 'gke/$(GKE_CLUSTER)/$(K8S_NAMESPACE)'  # optional Azure DevOps environment
+        pool:
+          vmImage: 'ubuntu-latest'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  displayName: "Checkout manifests (if stored with pipeline)"
+
+                - task: Bash@3
+                  name: ReplaceAndApplyManifests
+                  displayName: "Render manifests and apply (kubectl)"
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      set -euo pipefail
+                      echo "Deploying image $(IMAGE_URI) to namespace $(K8S_NAMESPACE)"
+                     
+                      kubectl -n $(K8S_NAMESPACE) set image deployment/$(IMAGE_NAME) $(IMAGE_NAME)=$(IMAGE_URI) --record
+                      kubectl -n $(K8S_NAMESPACE) rollout status deployment/$(IMAGE_NAME) --timeout=180s
+
+                - task: Bash@3
+                  name: PostCheck
+                  displayName: "Post-deploy sanity checks"
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      set -euo pipefail
+                      echo "Pods in namespace $(K8S_NAMESPACE):"
+                      kubectl -n $(K8S_NAMESPACE) get pods
+                      echo "Services:"
+                      kubectl -n $(K8S_NAMESPACE) get svc
+
+  - stage: Cleanup
+    displayName: "Cleanup secure file"
+    dependsOn: Deploy
+    condition: always()
+    jobs:
+      - job: Cleanup
+        displayName: "Remove downloaded secure key"
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: none
+          - task: Bash@3
+            name: RemoveKey
+            displayName: "Remove secure key from agent (best-effort)"
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                if [ -f "$(GCLOUD_KEY_PATH)" ]; then
+                  rm -f "$(GCLOUD_KEY_PATH)" && echo "Removed $(GCLOUD_KEY_PATH)"
+                else
+                  echo "No key found at $(GCLOUD_KEY_PATH)"
+                fi
+
