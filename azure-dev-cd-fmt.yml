@@ -12,37 +12,33 @@ resources:
 variables:
   - group: ci-pipeline-vars
   - name: IMAGE_TAG
-    value: "226"  # or dynamically: $[ resources.pipeline.ciPipeline.runID ]
+    value: "226"   # or use $[ resources.pipeline.ciPipeline.runID ]
   - name: IMAGE_URI
     value: "$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
   - name: K8S_NAMESPACE
-    value: 'default'
+    value: "default"
 
 stages:
-  - stage: GCP_AUTH_AND_DEPLOY
-    displayName: "Authenticate to GCP and Deploy to GKE"
+  - stage: GCP_DEPLOY
+    displayName: "Authenticate & Deploy to GKE"
     jobs:
-
-      # ============================
-      # JOB 1: GCP AUTHENTICATION
-      # ============================
-      - job: GCP_AUTH
-        displayName: "Authenticate to GCP and fetch cluster credentials"
+      - job: Deploy
+        displayName: "Deploy image $(IMAGE_URI) to GKE"
         pool:
-          vmImage: 'ubuntu-latest'
+          vmImage: "ubuntu-latest"
         steps:
-          - checkout: none
+          - checkout: self
 
           - task: DownloadSecureFile@1
             name: DownloadGcpKey
             displayName: "Download GCP Service Account Key"
             inputs:
-              secureFile: '$(SERVICE_ACCOUNT_SECUREFILE)'
+              secureFile: "$(SERVICE_ACCOUNT_SECUREFILE)"
 
           - task: Bash@3
             displayName: "Install Google Cloud SDK"
             inputs:
-              targetType: 'inline'
+              targetType: "inline"
               script: |
                 set -euo pipefail
                 if ! command -v gcloud >/dev/null; then
@@ -56,80 +52,51 @@ stages:
                 echo "gcloud version: $(gcloud version | head -n1)"
 
           - task: Bash@3
-            displayName: "Authenticate and Configure GCP"
+            displayName: "Authenticate to GCP and Configure Docker"
             inputs:
-              targetType: 'inline'
+              targetType: "inline"
               script: |
                 set -euo pipefail
-                echo "Authenticating with GCP..."
+                echo "Authenticating service account..."
                 gcloud auth activate-service-account --key-file="$(DownloadGcpKey.secureFilePath)"
                 gcloud config set project $(PROJECT_ID)
-                echo "Verifying auth..."
-                gcloud auth list
-                echo "Configuring docker authentication for GAR..."
                 gcloud auth configure-docker $(LOCATION)-docker.pkg.dev --quiet
-                echo "Fetching GKE credentials..."
-                # Use --region since cluster was created regionally
+                echo "Auth successful for project: $(PROJECT_ID)"
+
+          - task: Bash@3
+            displayName: "Get GKE Credentials"
+            inputs:
+              targetType: "inline"
+              script: |
+                set -euo pipefail
+                echo "Fetching GKE credentials for cluster $(CLUSTER_NAME)..."
+                # For regional cluster, use --region (not --zone)
                 gcloud container clusters get-credentials $(CLUSTER_NAME) --region $(LOCATION) --project $(PROJECT_ID)
                 echo "Available contexts:"
                 kubectl config get-contexts
-                echo "Saving kubeconfig for next job..."
-                mkdir -p $(Pipeline.Workspace)/kube
-                cp ~/.kube/config $(Pipeline.Workspace)/kube/config
-                echo "Cluster credentials fetched successfully."
-
-          - publish: $(Pipeline.Workspace)/kube
-            artifact: kubeconfig
-
-      # ============================
-      # JOB 2: DEPLOY TO GKE
-      # ============================
-      - job: DEPLOY
-        displayName: "Deploy Image to GKE"
-        dependsOn: GCP_AUTH
-        pool:
-          vmImage: 'ubuntu-latest'
-        steps:
-          - checkout: self
-            displayName: "Checkout repo (for manifests)"
-
-          - download: current
-            artifact: kubeconfig
-
-          - task: Bash@3
-            displayName: "Set kubeconfig and verify cluster"
-            inputs:
-              targetType: 'inline'
-              script: |
-                set -euo pipefail
-                export KUBECONFIG=$(Pipeline.Workspace)/kube/config
-                echo "Using kubeconfig at: $KUBECONFIG"
-                echo "Checking available contexts..."
-                kubectl config get-contexts
                 echo "Current context:"
                 kubectl config current-context
-                echo "Verifying cluster access..."
+                echo "Nodes in cluster:"
                 kubectl get nodes
 
           - task: Bash@3
-            displayName: "Deploy new image to GKE"
+            displayName: "Deploy Image to GKE"
             inputs:
-              targetType: 'inline'
+              targetType: "inline"
               script: |
                 set -euo pipefail
-                export KUBECONFIG=$(Pipeline.Workspace)/kube/config
                 echo "Deploying image: $(IMAGE_URI)"
                 kubectl -n $(K8S_NAMESPACE) set image deployment/$(IMAGE_NAME) $(IMAGE_NAME)=$(IMAGE_URI)
                 kubectl -n $(K8S_NAMESPACE) rollout status deployment/$(IMAGE_NAME) --timeout=300s
+                echo "Deployment completed successfully."
 
           - task: Bash@3
-            displayName: "Post-Deployment Verification"
+            displayName: "Post-Deployment Check"
             inputs:
-              targetType: 'inline'
+              targetType: "inline"
               script: |
                 set -euo pipefail
-                export KUBECONFIG=$(Pipeline.Workspace)/kube/config
-                echo "Pods in $(K8S_NAMESPACE):"
+                echo "Pods in namespace $(K8S_NAMESPACE):"
                 kubectl -n $(K8S_NAMESPACE) get pods -o wide
                 echo "Services:"
                 kubectl -n $(K8S_NAMESPACE) get svc
