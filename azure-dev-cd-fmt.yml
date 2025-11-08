@@ -12,7 +12,7 @@ resources:
 variables:
   - group: ci-pipeline-vars
   - name: IMAGE_TAG
-    value: "226"   # or use $[ resources.pipeline.ciPipeline.runID ]
+    value: $[ resources.pipeline.ciPipeline.runID ]
   - name: IMAGE_URI
     value: "$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
   - name: K8S_NAMESPACE
@@ -29,9 +29,6 @@ stages:
         steps:
           - checkout: self
 
-          # -----------------------------
-          # INSTALL GCLOUD + AUTH PLUGIN
-          # -----------------------------
           - task: Bash@3
             displayName: "Install gcloud & GKE Auth Plugin"
             inputs:
@@ -48,9 +45,7 @@ stages:
                 echo "Installed: $(gcloud version | head -n1)"
                 export USE_GKE_GCLOUD_AUTH_PLUGIN=True
 
-          # -----------------------------
-          # AUTHENTICATE GCP
-          # -----------------------------
+
           - task: DownloadSecureFile@1
             name: DownloadGcpKey
             displayName: "Download GCP Service Account Key"
@@ -70,9 +65,7 @@ stages:
                 gcloud auth configure-docker $(LOCATION)-docker.pkg.dev --quiet
                 echo "Auth successful for $(PROJECT_ID)"
 
-          # -----------------------------
-          # GET GKE CLUSTER CREDENTIALS
-          # -----------------------------
+
           - task: Bash@3
             displayName: "Fetch GKE Credentials"
             inputs:
