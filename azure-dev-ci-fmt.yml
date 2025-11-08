@@ -12,53 +12,56 @@ variables:
   value: '$(Build.BuildId)'
 
 stages:
-  - stage: Setup_GCP
-    displayName: "GCP GAR authentication"
-    jobs:
-      - job: GcpAuth
-        displayName: "Authenticate to GCP"
-        steps:
-          - task: DownloadSecureFile@1
-            name: DownloadGcpKey
-            displayName: "Downloading GCP service account key"
-            inputs: 
-              secureFile: '$(SERVICE_ACCOUNT_SECUREFILE)'
-          
-          - script: |
-              echo "Installing gcloud CLI..."
-              sudo apt-get update -y
-              sudo apt-get install -y apt-transport-https ca-certificates gnupg curl lsb-release
-
-
-              echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
-              curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
-              sudo apt-get update -y && sudo apt-get install -y google-cloud-sdk
-
-
-              echo "Authenticating service account..."
-              gcloud auth activate-service-account --key-file="$(DownloadGcpKey.secureFilePath)"
-              gcloud config set project $(PROJECT_ID)
-              gcloud auth configure-docker $(LOCATION)-docker.pkg.dev --quiet
-            displayName: "Install gcloud & Configure Docker Auth"
 
   - stage: Build_And_Push
     displayName: "Build and Push docker image to GAR"
-    dependsOn: Setup_GCP
+
     jobs:
       - job: BuildPush
         displayName: "Build and Push docker Image"
+        timeoutInMinutes: 120
         steps:
           - checkout: self 
+            displayName: "Checkout repo"
+
+          - task: DownloadSecureFile@1
+            name: DownloadGcpKey
+            displayName: "Download GCP service account key (secure file)"
+            inputs:
+              secureFile: '$(SERVICE_ACCOUNT_SECUREFILE)'
 
           - task: Bash@3
-            displayName: 'Authenticate with Google Cloud'
+            name: InstallGcloud
+            displayName: "Install Google Cloud SDK (gcloud)"
             inputs:
-            targetType: 'inline'
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                if ! command -v gcloud >/dev/null; then
+                  echo "Installing google-cloud-sdk..."
+                  sudo apt-get update -y
+                  sudo apt-get install -y apt-transport-https ca-certificates gnupg curl lsb-release
+                  echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
+                  curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+                  sudo apt-get update -y
+                  sudo apt-get install -y google-cloud-sdk
+                else
+                  echo "gcloud already installed."
+                fi
+        
+          - task: Bash@3
+            name: GcloudAuthConfigureDocker
+            displayName: "Authenticate service account and configure docker for Artifact Registry"
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                echo "Using secure file path: $(DownloadGcpKey.secureFilePath)"
 
-          - script: |
-              echo $GCLOUD_SERVICE_KEY | base64 --decode > ${HOME}/gcloud-service-key.json
-              gcloud auth activate-service-account --key-file="$(DownloadGcpKey.secureFilePath)"
-              gcloud auth configure-docker $(LOCATION)-docker.pkg.dev 
+                gcloud auth activate-service-account --key-file="$(DownloadGcpKey.secureFilePath)"
+                gcloud config set project $(PROJECT_ID)
+
+                gcloud auth configure-docker $(LOCATION)-docker.pkg.dev --quiet
 
           - task: Docker@2
             displayName: "Build Docker Image"
@@ -69,11 +72,15 @@ stages:
               tags: |
                 $(IMAGE_TAG)
 
-          - script: |
-              IMAGE_URI="$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
-              echo "##vso[task.setvariable variable=IMAGE_URI]$IMAGE_URI"
-              echo "Building image: $IMAGE_URI"
-            displayName: "GAR setup"
+          - task: Bash@3
+            name: SetImageUri
+            displayName: "Set IMAGE_URI pipeline variable"
+            inputs:
+              targetType: 'inline'
+              script: |
+                IMAGE_URI="$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
+                echo "##vso[task.setvariable variable=IMAGE_URI;isOutput=true]$IMAGE_URI"
+                echo "Built image: $IMAGE_URI"
 
           - task: Docker@2
             displayName: "Push Docker Image to GAR"
@@ -82,16 +89,24 @@ stages:
               repository: '$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME)'
               tags: |
                 $(IMAGE_TAG)
+          
+          - task: DeleteFiles@1
+            displayName: "Remove downloaded service account key from agent"
+            inputs:
+              SourceFolder: '$(Agent.TempDirectory)'
+              Contents: |
+                $(DownloadGcpKey.secureFilePath)
+              removeSourceFolder: false
 
   - stage: Cleanup
-    displayName: "Cleanup Temporary Files"
+    displayName: "Final Cleanup"
     dependsOn: Build_And_Push
+    condition: succeededOrFailed()   
     jobs:
-      - job: Clean
-        displayName: "Remove Service Account Key"
+      - job: FinalCleanup
+        displayName: "Final cleanup & verification"
         steps:
           - script: |
-              echo "Cleaning up secure key files..."
-              rm -f "$(DownloadGcpKey.secureFilePath)"
-              echo "Cleanup complete."
-            displayName: "Cleanup Service Account Key"
+              echo "IMAGE_URI = $(dependencies.Build_And_Push.outputs['BuildPush.SetImageUri.IMAGE_URI'])"
+              echo "Cleanup stage finished."
+            displayName: "Show IMAGE_URI (if available)"
