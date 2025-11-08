@@ -14,7 +14,7 @@ variables:
   - name: IMAGE_TAG
     value: $[ resources.pipeline.ciPipeline.runID ]  
   - name: IMAGE_URI
-    value: $[ concat( variables.LOCATION, '-docker.pkg.dev/', variables.PROJECT_ID, '/', variables.REPOSITORY, '/', variables.IMAGE_NAME, ':', variables.IMAGE_TAG ) ]
+    value: "$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
   - name: K8S_NAMESPACE
     value: 'default'   
 
