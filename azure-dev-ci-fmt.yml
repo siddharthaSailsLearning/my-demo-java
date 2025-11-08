@@ -54,7 +54,8 @@ stages:
             displayName: 'Authenticate with Google Cloud'
             inputs:
             targetType: 'inline'
-            script: |
+
+          - script: |
               echo $GCLOUD_SERVICE_KEY | base64 --decode > ${HOME}/gcloud-service-key.json
               gcloud auth activate-service-account --key-file="$(DownloadGcpKey.secureFilePath)"
               gcloud auth configure-docker $(LOCATION)-docker.pkg.dev 
