@@ -12,7 +12,7 @@ resources:
 variables:
   - group: ci-pipeline-vars
   - name: IMAGE_TAG
-    value: $[ resources.pipeline.java-app-ci.runID ]
+    value: $[ resources.pipeline.ciPipeline.runID ]
   - name: IMAGE_URI
     value: "$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
   - name: K8S_NAMESPACE
