@@ -12,7 +12,7 @@ resources:
 variables:
   - group: ci-pipeline-vars
   - name: IMAGE_TAG
-    value: "226"     #$[ resources.pipeline.ciPipeline.runID ]  
+    value: "226"    #$[ resources.pipeline.ciPipeline.runID ]  
   - name: IMAGE_URI
     value: "$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
   - name: K8S_NAMESPACE
@@ -98,8 +98,8 @@ stages:
                 echo "Using key: $(GCLOUD_KEY_PATH)"
                 gcloud auth activate-service-account --key-file="$(GCLOUD_KEY_PATH)"
                 gcloud config set project $(PROJECT_ID)
-                echo "Getting GKE credentials for cluster $(GKE_CLUSTER) in zone $(GKE_ZONE)..."
-                gcloud container clusters get-credentials $(GKE_CLUSTER) --zone $(GKE_ZONE) --project $(PROJECT_ID)
+                echo "Getting GKE credentials for cluster $(CLUSTER_NAME) in zone $(GKE_ZONE)..."
+                gcloud container clusters get-credentials $(CLUSTER_NAME) --zone $(GKE_ZONE) --project $(PROJECT_ID)
                 echo "kubectl version:"
                 kubectl version --client --short || true
                 kubectl get nodes --no-headers || true
@@ -110,6 +110,7 @@ stages:
     jobs:
       - deployment: DeployToGKE
         displayName: "Deploy image $(IMAGE_URI) to GKE namespace $(K8S_NAMESPACE)"
+        environment: 'gke/$(CLUSTER_NAME)/$(K8S_NAMESPACE)'  # optional Azure DevOps environment
         pool:
           vmImage: 'ubuntu-latest'
         strategy:
