@@ -12,7 +12,7 @@ resources:
 variables:
   - group: ci-pipeline-vars
   - name: IMAGE_TAG
-    value: "226"    # or use: $[ resources.pipeline.ciPipeline.runID ]
+    value: "226"  # or dynamically: $[ resources.pipeline.ciPipeline.runID ]
   - name: IMAGE_URI
     value: "$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
   - name: K8S_NAMESPACE
@@ -23,9 +23,9 @@ stages:
     displayName: "Authenticate to GCP and Deploy to GKE"
     jobs:
 
-      # -------------------------------
-      # JOB 1: Authenticate and Prepare
-      # -------------------------------
+      # ============================
+      # JOB 1: GCP AUTHENTICATION
+      # ============================
       - job: GCP_AUTH
         displayName: "Authenticate to GCP and fetch cluster credentials"
         pool:
@@ -35,76 +35,84 @@ stages:
 
           - task: DownloadSecureFile@1
             name: DownloadGcpKey
-            displayName: "Download GCP service account key"
+            displayName: "Download GCP Service Account Key"
             inputs:
               secureFile: '$(SERVICE_ACCOUNT_SECUREFILE)'
 
           - task: Bash@3
-            name: InstallGcloud
-            displayName: "Install Google Cloud SDK (if missing)"
+            displayName: "Install Google Cloud SDK"
             inputs:
               targetType: 'inline'
               script: |
                 set -euo pipefail
                 if ! command -v gcloud >/dev/null; then
-                  echo "Installing google-cloud-sdk..."
+                  echo "Installing gcloud..."
                   sudo apt-get update -y
                   sudo apt-get install -y apt-transport-https ca-certificates gnupg curl lsb-release
                   echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
                   curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
                   sudo apt-get update -y && sudo apt-get install -y google-cloud-sdk
                 fi
+                echo "gcloud version: $(gcloud version | head -n1)"
 
           - task: Bash@3
-            name: GcloudAuth
-            displayName: "Authenticate GCP and configure Docker"
+            displayName: "Authenticate and Configure GCP"
             inputs:
               targetType: 'inline'
               script: |
                 set -euo pipefail
-                echo "Authenticating service account..."
+                echo "Authenticating with GCP..."
                 gcloud auth activate-service-account --key-file="$(DownloadGcpKey.secureFilePath)"
                 gcloud config set project $(PROJECT_ID)
+                echo "Verifying auth..."
+                gcloud auth list
+                echo "Configuring docker authentication for GAR..."
                 gcloud auth configure-docker $(LOCATION)-docker.pkg.dev --quiet
-                echo "Fetching cluster credentials..."
+                echo "Fetching GKE credentials..."
+                # Use --region since cluster was created regionally
                 gcloud container clusters get-credentials $(CLUSTER_NAME) --region $(LOCATION) --project $(PROJECT_ID)
+                echo "Available contexts:"
+                kubectl config get-contexts
+                echo "Saving kubeconfig for next job..."
                 mkdir -p $(Pipeline.Workspace)/kube
                 cp ~/.kube/config $(Pipeline.Workspace)/kube/config
-                echo "##vso[task.setvariable variable=KUBECONFIG_PATH]$(Pipeline.Workspace)/kube/config"
-                echo "Cluster credentials saved for next job."
+                echo "Cluster credentials fetched successfully."
 
           - publish: $(Pipeline.Workspace)/kube
             artifact: kubeconfig
 
-      # -------------------------------
-      # JOB 2: Deploy using kubectl
-      # -------------------------------
+      # ============================
+      # JOB 2: DEPLOY TO GKE
+      # ============================
       - job: DEPLOY
-        displayName: "Deploy image to GKE"
+        displayName: "Deploy Image to GKE"
         dependsOn: GCP_AUTH
         pool:
           vmImage: 'ubuntu-latest'
         steps:
           - checkout: self
-            displayName: "Checkout source code (for manifests)"
+            displayName: "Checkout repo (for manifests)"
 
           - download: current
             artifact: kubeconfig
 
-          # - task: Bash@3
-          #   name: UseKubeConfig
-          #   displayName: "Set kubeconfig for kubectl"
-          #   inputs:
-          #     targetType: 'inline'
-          #     script: |
-          #       set -euo pipefail
-          #       export KUBECONFIG=$(Pipeline.Workspace)/kube/config
-          #       echo "Using kubeconfig at: $KUBECONFIG"
-          #       kubectl config current-context
+          - task: Bash@3
+            displayName: "Set kubeconfig and verify cluster"
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                export KUBECONFIG=$(Pipeline.Workspace)/kube/config
+                echo "Using kubeconfig at: $KUBECONFIG"
+                echo "Checking available contexts..."
+                kubectl config get-contexts
+                echo "Current context:"
+                kubectl config current-context
+                echo "Verifying cluster access..."
+                kubectl get nodes
 
           - task: Bash@3
-            name: DeployToGKE
-            displayName: "Apply deployment with new image"
+            displayName: "Deploy new image to GKE"
             inputs:
               targetType: 'inline'
               script: |
@@ -115,14 +123,13 @@ stages:
                 kubectl -n $(K8S_NAMESPACE) rollout status deployment/$(IMAGE_NAME) --timeout=300s
 
           - task: Bash@3
-            name: PostCheck
-            displayName: "Post-deploy sanity checks"
+            displayName: "Post-Deployment Verification"
             inputs:
               targetType: 'inline'
               script: |
                 set -euo pipefail
                 export KUBECONFIG=$(Pipeline.Workspace)/kube/config
-                echo "Pods:"
-                kubectl -n $(K8S_NAMESPACE) get pods
+                echo "Pods in $(K8S_NAMESPACE):"
+                kubectl -n $(K8S_NAMESPACE) get pods -o wide
                 echo "Services:"
                 kubectl -n $(K8S_NAMESPACE) get svc
