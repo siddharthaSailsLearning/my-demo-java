@@ -36,20 +36,20 @@ stages:
               secureFile: "$(SERVICE_ACCOUNT_SECUREFILE)"
 
           - task: Bash@3
-            displayName: "Install Google Cloud SDK"
+            displayName: "Install Google Cloud SDK and GKE Auth Plugin"
             inputs:
               targetType: "inline"
               script: |
                 set -euo pipefail
-                if ! command -v gcloud >/dev/null; then
-                  echo "Installing gcloud..."
-                  sudo apt-get update -y
-                  sudo apt-get install -y apt-transport-https ca-certificates gnupg curl lsb-release
-                  echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
-                  curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
-                  sudo apt-get update -y && sudo apt-get install -y google-cloud-sdk
-                fi
+                echo "Installing gcloud CLI..."
+                sudo apt-get update -y
+                sudo apt-get install -y apt-transport-https ca-certificates gnupg curl lsb-release
+                echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
+                curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+                sudo apt-get update -y
+                sudo apt-get install -y google-cloud-sdk google-cloud-sdk-gke-gcloud-auth-plugin
                 echo "gcloud version: $(gcloud version | head -n1)"
+                echo "gke-gcloud-auth-plugin installed successfully."
 
           - task: Bash@3
             displayName: "Authenticate to GCP and Configure Docker"
@@ -69,14 +69,14 @@ stages:
               targetType: "inline"
               script: |
                 set -euo pipefail
+                export USE_GKE_GCLOUD_AUTH_PLUGIN=True
                 echo "Fetching GKE credentials for cluster $(CLUSTER_NAME)..."
-                # For regional cluster, use --region (not --zone)
                 gcloud container clusters get-credentials $(CLUSTER_NAME) --region $(LOCATION) --project $(PROJECT_ID)
-                echo "Available contexts:"
+                echo "Contexts after authentication:"
                 kubectl config get-contexts
                 echo "Current context:"
                 kubectl config current-context
-                echo "Nodes in cluster:"
+                echo "Verifying cluster connectivity..."
                 kubectl get nodes
 
           - task: Bash@3
@@ -85,17 +85,19 @@ stages:
               targetType: "inline"
               script: |
                 set -euo pipefail
+                export USE_GKE_GCLOUD_AUTH_PLUGIN=True
                 echo "Deploying image: $(IMAGE_URI)"
                 kubectl -n $(K8S_NAMESPACE) set image deployment/$(IMAGE_NAME) $(IMAGE_NAME)=$(IMAGE_URI)
                 kubectl -n $(K8S_NAMESPACE) rollout status deployment/$(IMAGE_NAME) --timeout=300s
                 echo "Deployment completed successfully."
 
           - task: Bash@3
-            displayName: "Post-Deployment Check"
+            displayName: "Post-Deployment Verification"
             inputs:
               targetType: "inline"
               script: |
                 set -euo pipefail
+                export USE_GKE_GCLOUD_AUTH_PLUGIN=True
                 echo "Pods in namespace $(K8S_NAMESPACE):"
                 kubectl -n $(K8S_NAMESPACE) get pods -o wide
                 echo "Services:"
