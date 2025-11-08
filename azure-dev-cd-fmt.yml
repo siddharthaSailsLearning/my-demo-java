@@ -20,7 +20,7 @@ variables:
 
 stages:
 
-  - stage: Setup_GCP
+  - stage: GCP AUTH AND DEPLOY
     displayName: "Authenticate to GCP (for kubectl/gcloud)"
     jobs:
       - job: GcpAuth
@@ -69,102 +69,26 @@ stages:
                 echo "gcloud auth and docker configured."
 
           - task: Bash@3
-            name: ExposeKeyPath
-            displayName: "Set service key path variable for following jobs (one-stage safety)"
-            inputs:
-              targetType: 'inline'
-              script: |
-                echo "##vso[task.setvariable variable=GCLOUD_KEY_PATH]$(DownloadGcpKey.secureFilePath)"
-                echo "GCLOUD_KEY_PATH is set"
-
-  - stage: Prepare_K8s
-    displayName: "Prepare cluster access"
-    dependsOn: Setup_GCP
-    jobs:
-      - job: GetCredentials
-        displayName: "Obtain GKE credentials and verify cluster access"
-        pool:
-          vmImage: 'ubuntu-latest'
-        steps:
-          - checkout: none
-
-          - task: Bash@3
-            name: ActivateAndGetCreds
-            displayName: "Activate SA and fetch GKE credentials"
+            name: ReplaceAndApplyManifests
+            displayName: "Render manifests and apply (kubectl)"
             inputs:
               targetType: 'inline'
               script: |
                 set -euo pipefail
-                echo "Using key: $(GCLOUD_KEY_PATH)"
-                gcloud auth activate-service-account --key-file="$(GCLOUD_KEY_PATH)"
-                gcloud config set project $(PROJECT_ID)
-                echo "Getting GKE credentials for cluster $(CLUSTER_NAME) in zone $(GKE_ZONE)..."
-                gcloud container clusters get-credentials $(CLUSTER_NAME) --zone $(GKE_ZONE) --project $(PROJECT_ID)
-                echo "kubectl version:"
-                kubectl version --client --short || true
-                kubectl get nodes --no-headers || true
-
-  - stage: Deploy
-    displayName: "Deploy to GKE"
-    dependsOn: Prepare_K8s
-    jobs:
-      - deployment: DeployToGKE
-        displayName: "Deploy image $(IMAGE_URI) to GKE namespace $(K8S_NAMESPACE)"
-        environment: 'prod-env'  # optional Azure DevOps environment
-        pool:
-          vmImage: 'ubuntu-latest'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - checkout: self
-                  displayName: "Checkout manifests (if stored with pipeline)"
-
-                - task: Bash@3
-                  name: ReplaceAndApplyManifests
-                  displayName: "Render manifests and apply (kubectl)"
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      set -euo pipefail
-                      echo "Deploying image $(IMAGE_URI) to namespace $(K8S_NAMESPACE)"
+                echo "Deploying image $(IMAGE_URI) to namespace $(K8S_NAMESPACE)"
                      
-                      kubectl -n $(K8S_NAMESPACE) set image deployment/$(IMAGE_NAME) $(IMAGE_NAME)=$(IMAGE_URI) --record
-                      kubectl -n $(K8S_NAMESPACE) rollout status deployment/$(IMAGE_NAME) --timeout=180s
+                kubectl -n $(K8S_NAMESPACE) set image deployment/$(IMAGE_NAME) $(IMAGE_NAME)=$(IMAGE_URI) --record
+                kubectl -n $(K8S_NAMESPACE) rollout status deployment/$(IMAGE_NAME) --timeout=300s
 
-                - task: Bash@3
-                  name: PostCheck
-                  displayName: "Post-deploy sanity checks"
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      set -euo pipefail
-                      echo "Pods in namespace $(K8S_NAMESPACE):"
-                      kubectl -n $(K8S_NAMESPACE) get pods
-                      echo "Services:"
-                      kubectl -n $(K8S_NAMESPACE) get svc
-
-  - stage: Cleanup
-    displayName: "Cleanup secure file"
-    dependsOn: Deploy
-    condition: always()
-    jobs:
-      - job: Cleanup
-        displayName: "Remove downloaded secure key"
-        pool:
-          vmImage: 'ubuntu-latest'
-        steps:
-          - checkout: none
           - task: Bash@3
-            name: RemoveKey
-            displayName: "Remove secure key from agent (best-effort)"
+            name: PostCheck
+            displayName: "Post-deploy sanity checks"
             inputs:
               targetType: 'inline'
               script: |
                 set -euo pipefail
-                if [ -f "$(GCLOUD_KEY_PATH)" ]; then
-                  rm -f "$(GCLOUD_KEY_PATH)" && echo "Removed $(GCLOUD_KEY_PATH)"
-                else
-                  echo "No key found at $(GCLOUD_KEY_PATH)"
-                fi
+                echo "Pods in namespace $(K8S_NAMESPACE):"
+                kubectl -n $(K8S_NAMESPACE) get pods
+                echo "Services:"
+                kubectl -n $(K8S_NAMESPACE) get svc
 
