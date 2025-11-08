@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: sample-javaapp
-        image: us-central1-docker.pkg.dev/fluted-factor-438905-d2/jenkins-ci-cd-ar/javaapplication
+        image: us-central1-docker.pkg.dev/fluted-factor-438905-d2/azure-dev-artif-reg/my-java-app-azure:latest
         ports:
         - containerPort: 8080
         # readinessProbe:
