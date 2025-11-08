@@ -87,8 +87,20 @@ stages:
                 set -euo pipefail
                 export USE_GKE_GCLOUD_AUTH_PLUGIN=True
                 echo "Deploying image: $(IMAGE_URI)"
-                kubectl -n $(K8S_NAMESPACE) set image deployment/$(IMAGE_NAME) $(IMAGE_NAME)=$(IMAGE_URI)
-                kubectl -n $(K8S_NAMESPACE) rollout status deployment/$(IMAGE_NAME) --timeout=300s
+
+                echo "Checking if deployment exists..."
+                if kubectl -n $K8S_NAMESPACE get deployment sample-javaapp >/dev/null 2>&1; then
+                  echo " Deployment exists. Updating image..."
+                  kubectl -n $K8S_NAMESPACE set image deployment/sample-javaapp sample-javaapp=$FULL_IMAGE_NAME
+                else
+                  echo "Deployment does NOT exist. Creating deployment..."
+                  kubectl apply -f k8s/deployment.yaml
+                  kubectl apply -f k8s/service.yaml
+                fi
+
+
+                # kubectl -n $(K8S_NAMESPACE) set image deployment/$(IMAGE_NAME) $(IMAGE_NAME)=$(IMAGE_URI)
+                # kubectl -n $(K8S_NAMESPACE) rollout status deployment/$(IMAGE_NAME) --timeout=300s
                 echo "Deployment completed successfully."
 
           - task: Bash@3
