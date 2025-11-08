@@ -18,7 +18,7 @@ pool:
 variables:
 - group: cd-pipeline-vars
 - name: IMAGE_TAG
-  value: resources.pipeline.{Alias}.runID
+  value: $(resources.pipeline.{Alias}.runID)
 
 
 stages:
