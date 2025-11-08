@@ -19,15 +19,19 @@ gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="service
 
  ->>>>>>>> CD - PIPELINE SETUP <<<<<<<<-
 
-gcloud config set project fluted-factor-438905-d2
+gcloud container clusters create my-java-app-cluster --region us-central1 --num-nodes=1 --machine-type=e2-medium --workload-pool=fluted-factor-438905-d2.svc.id.goog
+
+gcloud container node-pools create node-pool-pullers --cluster=my-java-app-cluster --region=us-central1 --num-nodes=1 --disk-type=pd-standard --service-account=siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com
+
+gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/container.developer"
+
+gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/container.viewer"
 
 gcloud services enable container.googleapis.com artifactregistry.googleapis.com iam.googleapis.com containeranalysis.googleapis.com
 
 gcloud projects add-iam-policy-binding fluted-factor-438905-d2 --member="serviceAccount:siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com" --role="roles/artifactregistry.reader"
 
-gcloud container clusters create jenkins-deploy-cluster --region us-central1 --num-nodes=1 --machine-type=e2-medium --workload-pool=fluted-factor-438905-d2.svc.id.goog
 
-gcloud container node-pools create node-pool-pullers --cluster=jenkins-deploy-cluster --region=us-central1 --num-nodes=1 --disk-type=pd-standard --service-account=siddhu-service-account@fluted-factor-438905-d2.iam.gserviceaccount.com
 
 
 
