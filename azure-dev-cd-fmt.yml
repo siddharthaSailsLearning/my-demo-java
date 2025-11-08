@@ -67,7 +67,7 @@ stages:
                 gcloud config set project $(PROJECT_ID)
                 gcloud auth configure-docker $(LOCATION)-docker.pkg.dev --quiet
                 echo "Fetching cluster credentials..."
-                gcloud container clusters get-credentials $(GKE_CLUSTER) --region $(GKE_REGION) --project $(PROJECT_ID)
+                gcloud container clusters get-credentials $(CLUSTER_NAME) --region $(LOCATION) --project $(PROJECT_ID)
                 mkdir -p $(Pipeline.Workspace)/kube
                 cp ~/.kube/config $(Pipeline.Workspace)/kube/config
                 echo "##vso[task.setvariable variable=KUBECONFIG_PATH]$(Pipeline.Workspace)/kube/config"
