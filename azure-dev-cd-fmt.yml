@@ -91,29 +91,16 @@ stages:
           - download: current
             artifact: kubeconfig
 
-          - task: Bash@3
-            name: UseKubeConfig
-            displayName: "Set kubeconfig for kubectl"
-            inputs:
-              targetType: 'inline'
-              script: |
-                set -euo pipefail
-                export KUBECONFIG=$(Pipeline.Workspace)/kube/config
-                echo "Using kubeconfig at: $KUBECONFIG"
-
-                kubectl config get-contexts
-
-                CONTEXT_NAME=$(kubectl config get-contexts -o name | head -n 1)
-                
-                if [ -z "$CONTEXT_NAME" ]; then
-                  echo "Error: No contexts found in kubeconfig file."
-                  exit 1
-                fi
-
-                echo "Setting current context to: $CONTEXT_NAME"
-                kubectl config use-context "$CONTEXT_NAME"
-
-                kubectl config current-context
+          # - task: Bash@3
+          #   name: UseKubeConfig
+          #   displayName: "Set kubeconfig for kubectl"
+          #   inputs:
+          #     targetType: 'inline'
+          #     script: |
+          #       set -euo pipefail
+          #       export KUBECONFIG=$(Pipeline.Workspace)/kube/config
+          #       echo "Using kubeconfig at: $KUBECONFIG"
+          #       kubectl config current-context
 
           - task: Bash@3
             name: DeployToGKE
