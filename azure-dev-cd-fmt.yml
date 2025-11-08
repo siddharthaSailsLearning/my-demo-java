@@ -110,7 +110,7 @@ stages:
     jobs:
       - deployment: DeployToGKE
         displayName: "Deploy image $(IMAGE_URI) to GKE namespace $(K8S_NAMESPACE)"
-        environment: 'gke/$(CLUSTER_NAME)/$(K8S_NAMESPACE)'  # optional Azure DevOps environment
+        environment: 'prod-env'  # optional Azure DevOps environment
         pool:
           vmImage: 'ubuntu-latest'
         strategy:
