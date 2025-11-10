@@ -1,0 +1,35 @@
+trigger:
+  branches:
+    include: [main]
+
+pool: ubuntu-latest
+variables:
+  - group: ci-pipeline-vars
+
+stages:
+- stage: Build
+  jobs:
+  - job: TerraformBuild
+    steps:
+    - task: TerraformInstaller@0
+      inputs:
+        terraformVersion: 'latest'
+    - task: TerraformTaskV4@4
+      displayName: 'Terraform Init'
+      inputs:
+        provider: 'gcp'
+        command: 'init'
+        workingDirectory: 'infra/gke'
+- stage: Deploy
+  dependsOn: Build
+  jobs:
+  - job: TerraformApply
+    steps:
+    - task: TerraformTaskV4@4
+      displayName: 'Terraform Apply (GKE)'
+      inputs:
+        provider: 'gcp'
+        command: 'apply'
+        workingDirectory: 'infra/gke'
+        environmentServiceNameGCP: 'GCP-Service-Connection'
+        args: '-auto-approve'

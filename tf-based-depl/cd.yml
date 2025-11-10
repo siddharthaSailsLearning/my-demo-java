@@ -1,0 +1,96 @@
+trigger: none
+
+resources:
+  pipelines:
+    - pipeline: ciPipeline
+      source: java-app-ci
+      trigger:
+        branches:
+          include:
+            - azure-pipelines-ci
+
+variables:
+  - group: ci-pipeline-vars
+  - name: IMAGE_TAG
+    value: $[ resources.pipeline.ciPipeline.runID ]
+  - name: IMAGE_URI
+    value: "$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
+  - name: K8S_NAMESPACE
+    value: "default"
+
+stages:
+- stage: EnsureInfra_then_Deploy
+  jobs:
+    - job: EnsureInfra
+      displayName: "Trigger deploy-terraform and wait"
+      steps:
+        - task: Bash@3
+          displayName: "Trigger deploy-terraform"
+          env:
+            SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+            ADO_ORG_URL: $(ADO_ORG_URL)
+            ADO_PROJECT: $(ADO_PROJECT)
+          inputs:
+            targetType: 'inline'
+            script: |
+              set -euo pipefail
+              PIPELINE_ID=DEPLOY_TERRAFORM_PIPELINE_ID
+              API="$ADO_ORG_URL/$ADO_PROJECT/_apis/pipelines/$PIPELINE_ID/runs?api-version=7.1-preview.1"
+              BODY='{"resources":{}}'
+              run=$(curl -sS -u :$SYSTEM_ACCESSTOKEN -H "Content-Type: application/json" -d "$BODY" "$API")
+              runId=$(echo "$run" | jq -r '.id')
+              echo "Triggered deploy-terraform id=$runId"
+              # poll run until completed (same as earlier)...
+              while true; do
+                sleep 8
+                status=$(curl -sS -u :$SYSTEM_ACCESSTOKEN "$ADO_ORG_URL/$ADO_PROJECT/_apis/pipelines/$PIPELINE_ID/runs/$runId?api-version=7.1-preview.1" | jq -r '.state')
+                echo "deploy-terraform pipeline run state: $status"
+                if [[ "$status" == "completed" ]]; then
+                  result=$(curl -sS -u :$SYSTEM_ACCESSTOKEN "$ADO_ORG_URL/$ADO_PROJECT/_apis/pipelines/$PIPELINE_ID/runs/$runId?api-version=7.1-preview.1" | jq -r '.result')
+                  echo "deploy-terraform pipeline completed with result: $result"
+                  if [[ "$result" == "succeeded" ]]; then exit 0; else exit 1; fi
+                fi
+              done
+
+    - job: Deploy
+      displayName: "Deploy to GKE"
+      dependsOn: EnsureInfra
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - checkout: self
+        - task: DownloadSecureFile@1
+          name: DownloadGcpKey
+          inputs:
+            secureFile: '$(SERVICE_ACCOUNT_SECUREFILE)'
+        - task: Bash@3
+          displayName: "Install gcloud + plugin"
+          inputs:
+            targetType: inline
+            script: |
+              set -euo pipefail
+              sudo apt-get update -y
+              sudo apt-get install -y apt-transport-https ca-certificates gnupg curl lsb-release
+              echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
+              curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+              sudo apt-get update -y
+              sudo apt-get install -y google-cloud-sdk google-cloud-sdk-gke-gcloud-auth-plugin
+              export USE_GKE_GCLOUD_AUTH_PLUGIN=True
+        - task: Bash@3
+          displayName: "Authenticate & Get Credentials"
+          inputs:
+            targetType: inline
+            script: |
+              set -euo pipefail
+              export USE_GKE_GCLOUD_AUTH_PLUGIN=True
+              gcloud auth activate-service-account --key-file="$(DownloadGcpKey.secureFilePath)"
+              gcloud config set project $(PROJECT_ID)
+              gcloud container clusters get-credentials $(GKE_CLUSTER) --region $(GKE_REGION) --project $(PROJECT_ID)
+        - task: Bash@3
+          displayName: "Deploy app using kubectl"
+          inputs:
+            targetType: inline
+            script: |
+              set -euo pipefail
+              kubectl -n $(K8S_NAMESPACE) set image deployment/$(IMAGE_NAME) $(IMAGE_NAME)=$(IMAGE_URI) || kubectl apply -f k8s/
+              kubectl -n $(K8S_NAMESPACE) rollout status deployment/$(IMAGE_NAME) --timeout=300s

@@ -1,0 +1,115 @@
+trigger:
+  branches:
+    include:
+      - azure-pipelines-ci
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: ci-pipeline-vars
+  - name: IMAGE_TAG
+    value: '$(Build.BuildId)'
+  - name: IMAGE_URI
+    value: '$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)'
+
+stages:
+- stage: Ensure_GAR_then_Build
+  displayName: "Ensure GAR & Build+Push"
+  jobs:
+
+  - job: EnsureGAR
+    displayName: "Trigger gar-terraform pipeline & wait"
+    steps:
+      - checkout: none
+
+      # Use system access token — ensure "Allow scripts to access OAuth token" is ON
+      - task: Bash@3
+        displayName: "Trigger gar-terraform pipeline and wait"
+        env:
+          SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+          ADO_ORG_URL: $(ADO_ORG_URL)   # e.g. https://dev.azure.com/myOrg
+          ADO_PROJECT: $(ADO_PROJECT)   # e.g. myProject
+        inputs:
+          targetType: 'inline'
+          script: |
+            set -euo pipefail
+            PIPELINE_ID=GAR_PIPELINE_ID_OR_DEFINITION  # replace with numeric id or definition id
+            echo "Triggering GAR terraform pipeline (id:$PIPELINE_ID)..."
+            API="$ADO_ORG_URL/$ADO_PROJECT/_apis/pipelines/$PIPELINE_ID/runs?api-version=7.1-preview.1"
+            BODY='{"resources":{}}'
+            run=$(curl -sS -u :$SYSTEM_ACCESSTOKEN -H "Content-Type: application/json" -d "$BODY" "$API")
+            runId=$(echo "$run" | jq -r '.id')
+            echo "Triggered runId=$runId"
+            # Poll the run status
+            while true; do
+              sleep 8
+              status=$(curl -sS -u :$SYSTEM_ACCESSTOKEN "$ADO_ORG_URL/$ADO_PROJECT/_apis/pipelines/$PIPELINE_ID/runs/$runId?api-version=7.1-preview.1" | jq -r '.state')
+              echo "GAR pipeline run state: $status"
+              if [[ "$status" == "completed" ]]; then
+                result=$(curl -sS -u :$SYSTEM_ACCESSTOKEN "$ADO_ORG_URL/$ADO_PROJECT/_apis/pipelines/$PIPELINE_ID/runs/$runId?api-version=7.1-preview.1" | jq -r '.result')
+                echo "GAR pipeline completed with result: $result"
+                if [[ "$result" == "succeeded" ]]; then
+                  exit 0
+                else
+                  echo "GAR pipeline failed; exiting CI"
+                  exit 1
+                fi
+              fi
+            done
+
+  - job: BuildPush
+    displayName: "Build and Push Docker image"
+    dependsOn: EnsureGAR
+    steps:
+      - checkout: self
+
+      # Download the same secure file and authenticate gcloud (or use service connection)
+      - task: DownloadSecureFile@1
+        name: DownloadGcpKey
+        inputs:
+          secureFile: '$(SERVICE_ACCOUNT_SECUREFILE)'
+
+      - task: Bash@3
+        displayName: 'Install gcloud and configure docker auth'
+        inputs:
+          targetType: 'inline'
+          script: |
+            set -euo pipefail
+            sudo apt-get update -y
+            sudo apt-get install -y apt-transport-https ca-certificates gnupg curl lsb-release
+            echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
+            curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+            sudo apt-get update -y && sudo apt-get install -y google-cloud-sdk
+            gcloud auth activate-service-account --key-file="$(DownloadGcpKey.secureFilePath)"
+            gcloud config set project $(PROJECT_ID)
+            gcloud auth configure-docker $(LOCATION)-docker.pkg.dev --quiet
+
+      - task: Docker@2
+        displayName: "Build image"
+        inputs:
+          command: build
+          repository: '$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME)'
+          Dockerfile: '**/Dockerfile'
+          tags: |
+            $(IMAGE_TAG)
+
+      - task: Bash@3
+        displayName: "Set IMAGE_URI variable"
+        inputs:
+          targetType: inline
+          script: |
+            IMAGE_URI="$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
+            echo "##vso[task.setvariable variable=IMAGE_URI;isOutput=true]$IMAGE_URI"
+            echo "Built: $IMAGE_URI"
+
+      - task: Docker@2
+        displayName: "Push image to GAR"
+        inputs:
+          command: push
+          repository: '$(LOCATION)-docker.pkg.dev/$(PROJECT_ID)/$(REPOSITORY)/$(IMAGE_NAME)'
+          tags: |
+            $(IMAGE_TAG)
+
+      - publish: $(Build.ArtifactStagingDirectory)
+        artifact: image_meta
