@@ -79,9 +79,6 @@ stages:
                 kubectl config current-context
                 kubectl get nodes
 
-          # -----------------------------
-          # DEPLOY OR UPDATE APP
-          # -----------------------------
           - task: Bash@3
             displayName: "Deploy or Update Image on GKE"
             inputs:
@@ -93,21 +90,19 @@ stages:
 
                 echo "Checking for existing deployment $DEPLOYMENT_NAME..."
                 if kubectl -n $(K8S_NAMESPACE) get deployment $DEPLOYMENT_NAME >/dev/null 2>&1; then
-                  echo "✅ Deployment exists, updating image..."
+                  echo "Deployment exists, updating image..."
                   kubectl -n $(K8S_NAMESPACE) set image deployment/$DEPLOYMENT_NAME $DEPLOYMENT_NAME=$(IMAGE_URI)
                 else
-                  echo "⚙️  Deployment not found — creating from manifests..."
+                  echo "Deployment not found — creating from manifests..."
                   kubectl apply -f k8s/deployment.yaml
                   kubectl apply -f k8s/service.yaml
                 fi
 
                 echo "Waiting for rollout to finish..."
                 kubectl -n $(K8S_NAMESPACE) rollout status deployment/$DEPLOYMENT_NAME --timeout=300s
-                echo "✅ Deployment completed successfully."
+                echo "Deployment completed successfully."
 
-          # -----------------------------
-          # VERIFY POST DEPLOYMENT
-          # -----------------------------
+
           - task: Bash@3
             displayName: "Post-Deployment Verification"
             inputs:
